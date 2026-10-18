@@ -2,11 +2,16 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { describe, expect, it } from "vitest";
-import { App } from "./App";
+import { Calculator } from "./Calculator";
+import { Layout } from "./components/Layout";
+
+function CalculatorPage() {
+  return <Layout><h1 className="visually-hidden">Calculator</h1><Calculator /></Layout>;
+}
 
 function setup() {
   const user = userEvent.setup();
-  render(<App />);
+  render(<CalculatorPage />);
   const keypad = screen.getByRole("group", { name: "Keypad" });
   const key = (name: string) => within(keypad).getByRole("button", { name });
   const click = async (...names: string[]) => { for (const n of names) await user.click(key(n)); };
@@ -177,5 +182,19 @@ describe("WCAG 2.5.3 label in name (D13)", () => {
     check();
     await t.click("5");
     check();
+  });
+});
+
+describe("R2 props: per-profile Ans and decimal places", () => {
+  it("starts with the profile's stored Ans, formats with decimal places, reports Ans changes", async () => {
+    const user = userEvent.setup();
+    const changes: (string | null)[] = [];
+    render(<Calculator initialAns={"6.666666666666666666666666666666667e-1" as never} decimalPlaces={2} onAnsChange={(a) => changes.push(a)} />);
+    expect(screen.getByTestId("ans-row").textContent).toBe("Ans = 0.67");
+    await user.keyboard("A*3{Enter}");
+    expect(screen.getByTestId("result").textContent).toBe("2.00"); // full precision Ans (R2-4 §5.1)
+    expect(changes).toEqual(["2e+0"]);
+    await user.keyboard("{Escape}{Escape}");
+    expect(changes.at(-1)).toBeNull();
   });
 });
