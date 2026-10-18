@@ -6,6 +6,7 @@ import {
 } from "@calc/contracts";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
+import { parseDecimalString } from "@calc/engine";
 import { createAuth, type Resolved } from "../auth/auth";
 import type { Db } from "../db/client";
 import { ApiError, notFound } from "../domain/errors";
@@ -29,7 +30,8 @@ const Bodies = {
   signup: z.strictObject(SignupRequest.shape),
   login: z.strictObject(LoginRequest.shape),
   name: z.strictObject(ProfileNameRequest.shape),
-  ans: z.strictObject(AnsRequest.shape),
+  // The contract regex admits non-canonical forms (1.50e+0, -0e+0, 5e+9999); store only the engine's canonical form (ADR 0008).
+  ans: z.strictObject(AnsRequest.shape).refine((b) => b.ans === null || (parseDecimalString(b.ans) as string | null) === (b.ans as string), { path: ["ans"], message: "Not a canonical decimal" }),
   settings: z.strictObject(ProfileSettings.partial().shape).refine((o) => Object.keys(o).length > 0, "empty patch"),
 };
 const IdParam = z.object({ id: z.uuid() });

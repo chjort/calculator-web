@@ -261,7 +261,7 @@ describe("Ans per profile (P4, ADR 0008)", () => {
     expect(active(await c.me()).ans).toBeNull();
   });
 
-  it.each(["12.5", "1e+10000", "1." + "1".repeat(34) + "e+0", 5])("rejects non-canonical Ans %j", async (ans) => {
+  it.each(["12.5", "1e+10000", "1." + "1".repeat(34) + "e+0", 5, "1.50e+0", "-0e+0"])("rejects non-canonical Ans %j", async (ans) => {
     const { c } = await signedUp();
     expect((await c.call("PATCH", "/api/profile/ans", { ans })).statusCode).toBe(400);
   });

@@ -32,6 +32,9 @@ importers:
       '@calc/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@calc/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
       '@fastify/cookie':
         specifier: ^11.1.3
         version: 11.1.3
