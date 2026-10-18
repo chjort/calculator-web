@@ -1,0 +1,48 @@
+:root {
+  --page: #ffffff; --surface: #f1f3f5;
+  --text-primary: #1a1d21; --text-secondary: #4a5260; --error: #b3261e;
+  --key-digit: #ffffff; --key-op: #d6e4fa; --key-op-text: #0b3d91; --key-fn: #e1e4e8; --key-eq: #0b57d0;
+  --border: #767d88; --focus: #0b57d0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text-primary); background: var(--page);
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.header { height: 3.5rem; padding: 0 1rem; display: flex; align-items: center; }
+.app-name { font-size: 1.25rem; font-weight: 600; }
+.main { display: flex; justify-content: center; padding: 1rem; }
+.card { width: 100%; max-width: 25rem; background: var(--surface); border-radius: 1rem; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+@media (max-width: 599px) { .card { padding: 0.75rem; } .main { padding: 0.5rem; } }
+.display { min-height: 8rem; padding: 0.75rem 1rem; font-variant-numeric: tabular-nums; border-radius: 0.75rem; }
+.display:focus-visible, .key:focus-visible, summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.status-row { min-height: 1.25rem; font-size: 0.875rem; line-height: 1.4; color: var(--text-secondary); overflow-wrap: anywhere; }
+.expression { text-align: right; font-size: 2rem; font-weight: 500; min-height: 2.5rem; max-height: 7.5rem; overflow-y: auto; overflow-wrap: anywhere; display: flex; flex-direction: column-reverse; }
+.expression.final { font-size: 1.25rem; font-weight: 400; color: var(--text-secondary); min-height: 1.75rem; }
+.result { text-align: right; min-height: 3rem; overflow-wrap: anywhere; }
+.result .size-l { font-size: 2.5rem; font-weight: 600; }
+.result .size-m { font-size: 2rem; font-weight: 600; }
+.result .size-s { font-size: 1.5rem; font-weight: 600; }
+.result .placeholder { color: var(--text-secondary); }
+.result .hint { font-size: 1rem; color: var(--text-secondary); }
+.result .error { font-size: 1.25rem; font-weight: 600; color: var(--error); }
+.keypad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
+.key { position: relative; min-height: 3.5rem; min-width: 3.5rem; border-radius: 0.75rem; font: inherit; cursor: pointer; transition: background-color 150ms ease-out; }
+@media (min-width: 1024px) { .key { min-height: 4rem; } }
+.key.wide { grid-column: span 3; }
+.key-digit { background: var(--key-digit); color: var(--text-primary); border: 1px solid var(--border); font-size: 1.5rem; font-weight: 500; }
+.key-op { background: var(--key-op); color: var(--key-op-text); border: 1px solid var(--key-op-text); font-size: 1.625rem; font-weight: 500; }
+.key-fn { background: var(--key-fn); color: var(--text-primary); border: 1px solid var(--border); font-size: 1.125rem; font-weight: 600; }
+.key-fn[data-key="backspace"] { font-size: 1.5rem; }
+.key-eq { background: var(--key-eq); color: #fff; border: none; font-size: 1.625rem; font-weight: 500; }
+.key-digit:hover { background: #f1f3f5; } .key-op:hover { background: #c6daf8; } .key-fn:hover { background: #d0d4d9; } .key-eq:hover { background: #0a4bb5; }
+.key-digit:active, .key-digit.pressed { background: #d0d4d9; }
+.key-op:active, .key-op.pressed { background: #bbd1f5; }
+.key-fn:active, .key-fn.pressed { background: #c4c9cf; }
+.key-eq:active, .key-eq.pressed { background: #083f99; }
+.key[aria-disabled="true"] { color: var(--text-secondary); border-style: dashed; cursor: not-allowed; }
+.key[aria-disabled="true"]:hover { background: var(--key-fn); }
+.tooltip { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); background: var(--text-primary); color: #fff; font-size: 0.875rem; font-weight: 400; padding: 0.25rem 0.5rem; border-radius: 0.25rem; white-space: nowrap; z-index: 1; }
+.shortcuts { font-size: 0.875rem; color: var(--text-secondary); }
+.shortcuts summary { cursor: pointer; padding: 0.5rem 0; color: var(--text-primary); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
