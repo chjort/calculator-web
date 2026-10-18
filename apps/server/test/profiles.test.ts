@@ -149,6 +149,19 @@ describe("#4 AC1: create, rename and delete profiles", () => {
     expect(me(res).activeProfileId).toBe(work.activeProfileId);
   });
 
+  it("an upper-case id of the active profile still takes the delete-active path", async () => {
+    const { c, first } = await signedUp();
+    clock.advance(MIN);
+    const work = me(await c.call("POST", "/api/profiles", { name: "Work" }));
+    const res = await c.call("DELETE", `/api/profiles/${work.activeProfileId.toUpperCase()}`);
+    expect(res.statusCode).toBe(200);
+    expect(me(res).activeProfileId).toBe(first.activeProfileId);
+    expect(res.headers["set-cookie"]).toBeDefined();
+    expect((await c.me()).activeProfileId).toBe(first.activeProfileId);
+    const act = await c.call("POST", `/api/profiles/${first.activeProfileId.toUpperCase()}/activate`);
+    expect(act.headers["set-cookie"]).toBeUndefined(); // no-op on the active profile
+  });
+
   it("the last profile can't be deleted", async () => {
     const { c, first } = await signedUp();
     const res = await c.call("DELETE", `/api/profiles/${first.activeProfileId}`);

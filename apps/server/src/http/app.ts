@@ -110,7 +110,7 @@ export async function buildApp(o: AppOptions) {
   const profileId = (req: FastifyRequest) => {
     const p = IdParam.safeParse(req.params);
     if (!p.success) throw notFound();
-    return p.data.id as ProfileId;
+    return p.data.id.toLowerCase() as ProfileId; // Postgres returns lower-case uuids; compare like with like
   };
   const authLimit = { config: { rateLimit: { max: o.authRateLimit ?? 30, timeWindow: "1 minute" } } };
 
