@@ -14,7 +14,7 @@ export type SessionVerdict =
 /** Records whichever deadline passed first (Architect, PR #26): idle timeout before the 12 h cap is `timeout`. */
 export function classifySession(s: SessionTimes, now: Date): SessionVerdict {
   const idleDeadline = s.lastSeenAt.getTime() + IDLE_MS;
-  const idleFirst = idleDeadline < s.expiresAt.getTime();
+  const idleFirst = idleDeadline <= s.expiresAt.getTime(); // R2.md §2: idle ≤ cap → timeout
   if (idleFirst && now.getTime() > idleDeadline) return { kind: "ended", reason: "timeout", endedAt: new Date(idleDeadline) };
   if (now.getTime() >= s.expiresAt.getTime()) return { kind: "ended", reason: "expired", endedAt: s.expiresAt };
   return { kind: "active", touch: now.getTime() - s.lastSeenAt.getTime() > LAST_SEEN_THROTTLE_MS };
