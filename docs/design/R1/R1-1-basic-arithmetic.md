@@ -69,10 +69,10 @@ flowchart TD
     S -- no --> T{Key type}
     T -- digit --> D1{"Current number is a lone 0?"}
     D1 -- yes --> D2["Replace 0 with digit"]
-    D1 -- no --> D3["Append; if after ) or Ans, insert × first"]
+    D1 -- no --> D3["Append; if after ), % or Ans, insert × first (D14)"]
     T -- "." --> P1{"Current number already has a point?"}
     P1 -- yes --> NOP["No-op"]
-    P1 -- no --> P2["Append; prefix 0 if no digit before"]
+    P1 -- no --> P2["Append; prefix 0 if no digit before;<br/>if after ), % or Ans, insert × first (D14)"]
     T -- "+ × ÷" --> O1{Last token}
     O1 -- operator --> O2["Replace previous operator(s)"]
     O1 -- "empty or (" --> NOP
@@ -84,7 +84,7 @@ flowchart TD
     T -- "%" --> PC1{"Last token is number, ) or Ans?"}
     PC1 -- yes --> PC2["Append %"]
     PC1 -- no --> NOP
-    T -- "(" --> B1["Append; insert × first if after number, ) or Ans"]
+    T -- "(" --> B1["Append; insert × first if after number, ), % or Ans (D14)"]
     T -- ")" --> B2{"Unclosed ( exists and last token is not operator or (?"}
     B2 -- yes --> B3["Append )"]
     B2 -- no --> NOP
@@ -284,8 +284,9 @@ Ans empty vs set and C/AC/Backspace states are in #2 (§4 of R1-2).
 | Leading zeros | `0 0 7` | `7` | a lone `0` is replaced by the next digit; `0.07` is fine |
 | Decimal first | `.` `5` | `0.5` | auto-prefix `0` |
 | Multiple decimals | `1 . 2 .` | `1.2` | a second `.` in the same number is a no-op |
-| Decimal after `)` / Ans | `(2) .` | `(2) × 0.` | implicit × and a `0` prefix |
+| Decimal after `)` / `%` / Ans | `(2) .` · `50 % .` | `(2) × 0.` · `50% × 0.` | implicit × and a `0` prefix (D14) |
 | Implicit multiplication | `2 (` / `) 3` | `2 × (` / `) × 3` | × is inserted **visibly** |
+| Implicit × after `%` | `50 % 2` · `50 % (` · `50 % Ans` | `50% × 2` (= 1) · `50% × (` · `50% × Ans` | `%` is a postfix like `)`: a following digit, `(`, `.` or Ans gets a visible × (D14). Operators after `%` are appended as normal (`50% + 2`) |
 | Unmatched `)` | `)` with no open `(` | no-op | |
 | Empty parens | `( )` | no-op on `)` | |
 | Missing `)` | `(1 + 2` `=` | `(1 + 2) =` → `3` | auto-closed, and shown |
@@ -312,21 +313,24 @@ Ans empty vs set and C/AC/Backspace states are in #2 (§4 of R1-2).
 | Page title / h1 | Calculator | — |
 | Display group | — | `Calculator display` |
 | Keypad group | — | `Keypad` |
-| 0–9 | `0`…`9` | (label) `0`…`9` |
+| 0–9 | `0`…`9` | `0`…`9` (text key: name = visible text, D13) |
 | `.` | `.` | `Decimal point` |
 | `+` | `+` | `Plus` |
 | `−` | `−` | `Minus` |
 | `×` | `×` | `Times` |
 | `÷` | `÷` | `Divided by` |
-| `%` | `%` | `Percent` |
+| `%` | `%` | `Percent` (symbol key: descriptive name) |
 | `(` | `(` | `Open parenthesis` |
 | `)` | `)` | `Close parenthesis` |
 | `=` | `=` | `Equals` |
+| `C` / `AC` / `Ans` | see R1-2 §3 / §6 | `C, clear` · `AC, all clear` · `Ans, previous answer` (text keys: the name **starts with** the visible text, D13) |
 | Divide-by-zero error | ⚠ Error: Can't divide by zero | announced the same |
 | Overflow error | ⚠ Error: Number too large | announced the same |
 | Incomplete hint | ⓘ Finish the expression | announced the same. Also the stored error message of the history entry (D3) |
 | Max length | ⓘ Maximum length reached | announced the same |
-| Shortcuts disclosure | ▸ Keyboard shortcuts | native `<details>/<summary>` |
+| Shortcuts disclosure | ▸ Keyboard shortcuts | native `<details>/<summary>`; name = visible text "Keyboard shortcuts" (no aria-label) |
+
+**Label-in-name rule (D13, WCAG 2.5.3):** every control whose visible label is text (letters or digits) has an accessible name that **starts with** that exact visible text. Controls that show a symbol (`+ − × ÷ % ( ) . =` and ⌫) keep their descriptive names (`Times`, `Percent`, `Backspace` …). Never set an `aria-label` that replaces visible text with a different word.
 
 Spoken forms used in announcements: `+` plus, `−` minus (unary: "negative"), `×` times, `÷` divided by, `%` percent, `(` open parenthesis, `)` close parenthesis, `.` point, `Ans` Ans, `=` equals.
 
@@ -334,7 +338,7 @@ Spoken forms used in announcements: `+` plus, `−` minus (unary: "negative"), `
 
 ## 7. Keyboard
 
-### 7.1 Mapping (active while focus is inside the calculator card; see §8.3)
+### 7.1 Mapping (active while focus is inside the calculator card; see §8.5)
 
 | Key(s) | Action |
 |---|---|
@@ -382,9 +386,9 @@ These go through one visually hidden `role="status"` region (polite).
 8. **Reduced motion**: with `prefers-reduced-motion: reduce`, there are no transitions on key press, the emphasis swap and the font step-down. Otherwise transitions are ≤ 150ms ease-out and never flash.
 9. **Zoom / reflow**: at 200% zoom and at 320 CSS px width, the single-column layout keeps working. The keypad stays 4 columns (≈ 70px keys at 320px), the display wraps, and nothing scrolls horizontally (1.4.4, 1.4.10). Text spacing overrides (1.4.12) must not clip key labels: no fixed heights on label text.
 10. **Contrast**: see §3.4 (1.4.3, 1.4.11).
-11. **Name matches label** (2.5.3): accessible names contain or match the visible symbol meaning (e.g. "Times" for ×). Voice users can say "click times" or "click 7".
+11. **Label in Name** (2.5.3, D13): every text-labelled key has an accessible name that **starts with** its visible text: `7` → "7", `C` → "C, clear", `AC` → "AC, all clear", `Ans` → "Ans, previous answer". Symbol keys (× ÷ − + % ( ) . = ⌫) keep descriptive names ("Times", "Divided by", "Minus", "Percent", "Backspace" …). Voice users can say "click AC", "click Ans", "click 7" or "click times".
 12. **Language**: `lang="en"` on `<html>`.
-13. **Testing hooks** (for #11 later): axe clean, NVDA+Firefox, VoiceOver+Safari (macOS & iOS), keyboard-only pass.
+13. **Testing hooks** (for #11 later): axe clean, NVDA+Firefox, VoiceOver+Safari (macOS & iOS), keyboard-only pass. **axe's `label-content-name-mismatch` (label-in-name) check must stay enabled** in automated tests and must not be disabled or excluded for keypad keys (D13).
 
 ---
 
@@ -392,10 +396,10 @@ These go through one visually hidden `role="status"` region (polite).
 
 | AC (#1) | Covered by | Notes |
 |---|---|---|
-| Supports +, −, ×, ÷, % and parentheses | §2 wireframes (keys), §3.3 keypad, §1.3 input logic, §5 edge cases, §6 copy, §7.1 keyboard | `%` = postfix ÷100 (**D1**) |
+| Supports +, −, ×, ÷, % and parentheses | §2 wireframes (keys), §3.3 keypad, §1.3 input logic, §5 edge cases, §6 copy, §7.1 keyboard | `%` = postfix ÷100 (**D1**); `%` followed by digit, `(`, `.` or Ans gets a visible × (**D14**) |
 | Results accurate to at least 12 significant digits | §3.5 number display, §4 S3/S8, §5 precision rows | display = 12 sig. digits (**D2**) |
 | Dividing by zero shows a clear error message instead of crashing | §4 S5, §6 error copy, §8.3, §1.1 Error state, §12 history | recovery paths in #2. Related: incomplete `=` shows a hint and is saved to history as an error entry (**D3**, §4 S7, §12) |
-| Works with both keyboard and mouse input | §7 keyboard, §3.3 keys and states, §8.4–8.7 | Enter always = equals (**D5**) |
+| Works with both keyboard and mouse input | §7 keyboard, §3.3 keys and states, §6 label-in-name rule, §8.4–8.7, §8.11 | Enter always = equals (**D5**); names start with visible text for voice/pointer users (**D13**) |
 
 ---
 
@@ -415,6 +419,8 @@ None. All R1 questions were resolved by the PO on 2026-10-18 (§11).
 | D6 | Decimal separator | R1 displays `.` and accepts both `.` and `,` from the keyboard. Locale formatting may come with R2 profile settings |
 | D7 | Accessibility target | **WCAG 2.2 AA** is the bar for R1 and for #11 |
 | D8–D12 | Clear, Backspace, Ans | See R1-2 §11 |
+| D13 | Label in Name (WCAG 2.5.3), 2026-10-18 | Agreed with the Developer within the PO-approved scope (review of PR #15). Every key that shows text has an accessible name that **starts with** that text: `C, clear`, `AC, all clear`, `Ans, previous answer`, digits = the digit. Symbol keys (× ÷ − + % ( ) . = ⌫) keep descriptive names. The `Ans = …` status row has no aria-label (its name is its visible text). axe's label-in-name check stays enabled |
+| D14 | `%` implicit ×, 2026-10-18 | Agreed with the Developer within the PO-approved scope (review of PR #15). `%` is a postfix like `)`. A digit, `(`, `.` or Ans after `%` inserts a visible ×: `50%2` → `50% × 2`, `50%(` → `50% × (`, `50%.` → `50% × 0.`, `50%Ans` → `50% × Ans` |
 
 ## 12. History notes: forward requirements for R3 (#6, #7)
 
