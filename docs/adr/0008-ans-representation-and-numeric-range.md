@@ -21,6 +21,8 @@ From R2, Ans is stored per profile on the server (ADR 0007, R2.md). The plain de
 - **Display:** unchanged (12 significant digits; scientific at ≥ 1e12 or < 1e-6).
 - **Golden tests:** `1e-400`, `1e-9999`, `1e-10000` → 0, `1e10000` → overflow, and an Ans round-trip.
 
+**Amendment (2026-10-18):** the engine uses `Decimal.clone({precision:34, minE:-9999, maxE:9999, …})` instead of the global `Decimal.set(...)`. The settings are identical, and the engine never mutates global decimal.js state.
+
 ## Consequences
 - + `ans` is bounded at 48 characters in contracts and the DB, and nothing representable is lost.
 - + One canonical form serves Ans storage, the D12 save form and parsing.
