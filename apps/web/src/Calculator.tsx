@@ -68,7 +68,7 @@ export function Calculator() {
         {KEYS.map((k) => {
           const isClear = k.id === "clear";
           const label = isClear ? (empty ? "AC" : "C") : k.label;
-          const name = isClear ? (empty ? "All clear" : "Clear") : k.name;
+          const name = isClear ? (empty ? "AC, all clear" : "C, clear") : k.name;
           const disabled = k.id === "ans" && editor.ans === null;
           return (
             <button

@@ -20,7 +20,7 @@ function setup() {
 describe("mouse input (#1 AC4, #2 AC4)", () => {
   it("computes with the on-screen keypad", async () => {
     const t = setup();
-    await t.click("1", "2", "Times", "Open parenthesis", "3", "Minus", "1", "Close parenthesis", "Equals");
+    await t.click("1", "2", "Times", "(, open parenthesis", "3", "Minus", "1", "), close parenthesis", "=, equals");
     expect(t.expression()).toBe("12 × (3 − 1) =");
     expect(t.result()).toBe("24");
     expect(t.ansRow()).toBe("Ans = 24");
@@ -29,34 +29,34 @@ describe("mouse input (#1 AC4, #2 AC4)", () => {
 
   it("percent, divide by zero error, backspace, clear, Ans", async () => {
     const t = setup();
-    await t.click("2", "0", "0", "Plus", "1", "0", "Percent", "Equals");
+    await t.click("2", "0", "0", "+, plus", "1", "0", "Percent", "=, equals");
     expect(t.result()).toBe("200.1");
-    await t.click("8", "Divided by", "0", "Equals");
+    await t.click("8", "Divided by", "0", "=, equals");
     expect(t.result()).toBe("⚠ Error: Can't divide by zero");
     expect(t.announced()).toBe("Error: Can't divide by zero");
     await t.click("Backspace");
     expect(t.expression()).toBe("8 ÷ 0");
-    await t.click("Clear");
+    await t.click("C, clear");
     expect(t.result()).toBe("0");
     expect(t.ansRow()).toBe("Ans = 200.1");
-    await t.click("Ans, insert last result", "Times", "1", "0", "Equals");
+    await t.click("Ans, previous answer", "Times", "1", "0", "=, equals");
     expect(t.result()).toBe("2001");
-    await t.click("Clear", "All clear");
+    await t.click("C, clear", "AC, all clear");
     expect(t.ansRow()).toBe("");
   });
 
   it("C/AC label and name swap; Ans is aria-disabled when empty but focusable", async () => {
     const t = setup();
-    expect(t.key("All clear")).toHaveTextContent("AC");
-    const ans = t.key("Ans, insert last result");
+    expect(t.key("AC, all clear")).toHaveTextContent("AC");
+    const ans = t.key("Ans, previous answer");
     expect(ans).toHaveAttribute("aria-disabled", "true");
     expect(ans).not.toBeDisabled();
-    await t.click("Ans, insert last result");
+    await t.click("Ans, previous answer");
     expect(t.result()).toBe("ⓘ No previous result yet");
     await t.click("5");
-    expect(t.key("Clear")).toHaveTextContent("C");
-    await t.click("Equals");
-    expect(t.key("Ans, insert last result")).not.toHaveAttribute("aria-disabled");
+    expect(t.key("C, clear")).toHaveTextContent("C");
+    await t.click("=, equals");
+    expect(t.key("Ans, previous answer")).not.toHaveAttribute("aria-disabled");
   });
 });
 
@@ -111,9 +111,9 @@ describe("keyboard input (#1 AC4, #2 AC4)", () => {
   it("Tab order: display, then keys row by row, then shortcuts", async () => {
     const t = setup();
     await t.user.tab();
-    expect(t.key("All clear")).toHaveFocus();
+    expect(t.key("AC, all clear")).toHaveFocus();
     await t.user.tab();
-    expect(t.key("Open parenthesis")).toHaveFocus();
+    expect(t.key("(, open parenthesis")).toHaveFocus();
     for (let i = 0; i < 21; i++) await t.user.tab();
     expect(screen.getByText("Keyboard shortcuts")).toHaveFocus();
   });
@@ -155,5 +155,23 @@ describe("accessibility (WCAG 2.2 AA, axe)", () => {
     expect(status[0]).toHaveAttribute("aria-atomic", "true");
     expect(within(screen.getByRole("group", { name: "Keypad" })).getAllByRole("button")).toHaveLength(22);
     for (const b of screen.getAllByRole("button")) expect(b).toHaveAttribute("type", "button");
+  });
+});
+
+describe("WCAG 2.5.3 label in name", () => {
+  it("every text-labelled key's name starts with its visible text; symbol keys keep descriptive names", async () => {
+    const t = setup();
+    const symbols: Record<string, string> = { "×": "Times", "÷": "Divided by", "−": "Minus", "⌫": "Backspace", "%": "Percent" };
+    const check = () => {
+      for (const b of within(screen.getByRole("group", { name: "Keypad" })).getAllByRole("button")) {
+        const text = b.textContent!.replace("Backspace", "");
+        const name = b.getAttribute("aria-label")!;
+        if (symbols[text]) expect(name).toBe(symbols[text]);
+        else expect(name.startsWith(text), `${text} -> ${name}`).toBe(true);
+      }
+    };
+    check();
+    await t.click("5");
+    check();
   });
 });

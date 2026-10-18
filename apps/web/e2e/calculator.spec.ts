@@ -12,12 +12,12 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("#1: mouse/touch arithmetic, %, parentheses, divide by zero", async ({ page }) => {
-  for (const k of ["1", "2", "Times", "Open parenthesis", "3", "Minus", "1", "Close parenthesis", "Equals"]) await key(page, k).click();
+  for (const k of ["1", "2", "Times", "(, open parenthesis", "3", "Minus", "1", "), close parenthesis", "=, equals"]) await key(page, k).click();
   await expect(expression(page)).toHaveText("12 × (3 − 1) =");
   await expect(result(page)).toHaveText("24");
-  for (const k of ["2", "0", "0", "Plus", "1", "0", "Percent", "Equals"]) await key(page, k).click();
+  for (const k of ["2", "0", "0", "+, plus", "1", "0", "Percent", "=, equals"]) await key(page, k).click();
   await expect(result(page)).toHaveText("200.1");
-  for (const k of ["8", "Divided by", "0", "Equals"]) await key(page, k).click();
+  for (const k of ["8", "Divided by", "0", "=, equals"]) await key(page, k).click();
   await expect(result(page)).toHaveText("⚠ Error: Can't divide by zero");
 });
 
@@ -43,23 +43,21 @@ test("#2: clear, backspace and Ans with keyboard and mouse", async ({ page }) =>
   await expect(expression(page)).toHaveText("12 +");
   await page.keyboard.press("Escape");
   await expect(result(page)).toHaveText("0");
-  await key(page, "Ans, insert last result").click();
+  await key(page, "Ans, previous answer").click();
   await page.keyboard.type("*2");
   await page.keyboard.press("Enter");
   await expect(expression(page)).toHaveText("Ans × 2 =");
   await expect(result(page)).toHaveText("30");
-  await key(page, "Clear").click();
-  await key(page, "All clear").click();
+  await key(page, "C, clear").click();
+  await key(page, "AC, all clear").click();
   await expect(page.getByTestId("ans-row")).toHaveText("");
-  await expect(key(page, "Ans, insert last result")).toHaveAttribute("aria-disabled", "true");
+  await expect(key(page, "Ans, previous answer")).toHaveAttribute("aria-disabled", "true");
 });
 
 test("a11y: no axe WCAG 2.2 AA violations (incl. contrast) in key states", async ({ page }) => {
   const check = async () => {
     const r = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-      // Experimental rule; the spec mandates "AC" with the name "All clear" (R1-2 §3). Flagged in the PR as an open question.
-      .disableRules(["label-content-name-mismatch"])
       .analyze();
     expect(r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(", ")}`)).toEqual([]);
   };
