@@ -37,6 +37,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      - name: Schema drift (hand-written migrations vs Drizzle schema)
+        run: pnpm --filter @calc/server check:schema
       - run: pnpm test
       - run: pnpm build
 
