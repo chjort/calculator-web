@@ -2,7 +2,7 @@
 
 Status: **Accepted by PO (2026-10-18)** · Owner: Architect · Scope: whole roadmap (R1–R4), R1 (#1, #2) first.
 UX specs (Designer, on the shared computer and not yet in the repo): `product/design/R1-1-basic-arithmetic.md` (#1) · `product/design/R1-2-clear-backspace-ans.md` (#2). They own behaviour and copy (decisions D1–D12, approved by PO); this doc only gives them a shape.
-Decisions: [ADR 0001 stack](adr/0001-stack-and-repo-layout.md) · [0002 evaluation](adr/0002-expression-evaluation.md) · [0003 auth/sessions](adr/0003-auth-and-profile-sessions.md) · [0004 history/retention](adr/0004-history-storage-and-retention.md) · [0005 credentials/throttling](adr/0005-credential-policy-and-login-throttling.md) · [0006 profile limits/deletion](adr/0006-profile-limits-and-deletion.md)
+Decisions: [ADR 0001 stack](adr/0001-stack-and-repo-layout.md) · [0002 evaluation](adr/0002-expression-evaluation.md) · [0003 auth/sessions](adr/0003-auth-and-profile-sessions.md) · [0004 history/retention](adr/0004-history-storage-and-retention.md) · [0005 credentials/throttling](adr/0005-credential-policy-and-login-throttling.md) · [0006 profile limits/deletion](adr/0006-profile-limits-and-deletion.md) · [0007 delete active profile](adr/0007-delete-active-profile.md)
 Release detail: [R2 accounts & profiles](architecture/R2.md) (flows, migrations, API contract)
 
 Legend: **[R1]** build now · **[R2]** accounts/profiles · **[R3]** sessions/history · **[R4]** polish
@@ -78,7 +78,8 @@ erDiagram
     uuid account_id FK
     text name "unique per account"
     smallint decimal_places "null = auto, 0..12"
-    text theme "light|dark|system"
+    text theme "light|dark|system, default system"
+    text ans "DecimalString, null = none (R2)"
     timestamptz created_at
   }
   SESSION {
@@ -177,7 +178,7 @@ export type EditorState =
   | { mode: "typing" | "hint"; tokens: readonly Token[] }     // hint = "Finish the expression"
   | { mode: "result"; tokens: readonly Token[]; value: DecimalString }
   | { mode: "error"; tokens: readonly Token[]; error: CalcError };
-export type Editor = { state: EditorState; ans: DecimalString | null }; // Ans never holds an error; page memory in R1, per active profile from R2 (D11)
+export type Editor = { state: EditorState; ans: DecimalString | null }; // Ans never holds an error; page memory in R1; from R2 stored per profile (profile.ans), kept across switch/login, cleared by AC or profile deletion (P4)
 export type EditorAction =
   | { type: "input"; token: Token }  // guarded: invalid keys are no-ops; implicit × inserted as a real token
   | { type: "backspace" }            // pops the last token (whole Ans); in result/error: undo the "="
@@ -246,7 +247,7 @@ R1 grammar (precedence low→high): `expr := term (("+"|"-") term)*` · `term :=
 
 ## 9. Decisions recorded (PO, 2026-10-18)
 1. `%` = postfix ÷ 100 (`200 + 10% = 200.1`).
-2. Login opens the last-used profile, i.e. the profile of the account's most recent session. If there is none (new account, or older than retention), the oldest profile is used.
+2. Login opens the last-used profile, i.e. the profile of the account's session with the latest `last_seen_at`. If there is none (new account, or older than retention), the oldest profile is used.
 3. 30 min idle ends the session; a fresh login is required.
 4. CSV keeps the standard formula guard, including `-`.
 5. No `ans` column. Saved expressions have Ans substituted with its value (Designer D12).
