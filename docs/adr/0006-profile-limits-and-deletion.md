@@ -1,6 +1,6 @@
 # ADR 0006: Profile limits and deletion semantics
 
-Status: Proposed · Date: 2026-10-18 · Scope: R2 (#4), affects R3
+Status: Accepted (PO, 2026-10-18; delete-UX details pending Designer) · Date: 2026-10-18 · Scope: R2 (#4), affects R3
 
 ## Context
 #4 needs create, rename, delete and switch. ARCHITECTURE §4 says every account has at least one profile. It doesn't say how many profiles are allowed, what deleting does to sessions and history, or whether the active profile can be deleted.
@@ -12,7 +12,7 @@ Status: Proposed · Date: 2026-10-18 · Scope: R2 (#4), affects R3
 
 ## Decision
 Option 2.
-- **Limit:** at most 10 profiles per account (409 `profile_limit`).
+- **Limit:** at most 10 profiles per account (409 `profile_limit`, PO-confirmed).
 - **Names:** unique per account, case-insensitive (409 `profile_name_taken`), 1 to 40 characters, trimmed.
 - **Delete:** `DELETE` is a hard delete that cascades to the profile's sessions and (R3) calculations. The last profile can't be deleted (409 `last_profile`), and neither can the profile active in the requesting session (409 `profile_active`).
 - **Race safety:** the limit and last-profile checks run under `SELECT … FOR UPDATE` on the account row.

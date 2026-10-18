@@ -89,7 +89,8 @@ erDiagram
     timestamptz started_at
     timestamptz last_seen_at "idle clock"
     timestamptz ended_at "null = open"
-    text end_reason "logout|timeout|profile_switch"
+    timestamptz expires_at "absolute cap: login + 12 h, inherited on switch"
+    text end_reason "logout|timeout|expired|profile_switch"
   }
   CALCULATION {
     uuid id PK
@@ -116,9 +117,10 @@ Invariants (enforced in DB, mirrored in types):
 ```mermaid
 stateDiagram-v2
   [*] --> Open: login (profile = last used) / switch profile
-  Open --> Open: request within 30 min → last_seen_at = now (write at most 1/min)
+  Open --> Open: request within 30 min (incl. POST /session/touch after real input) → last_seen_at = now (write at most 1/min)
   Open --> Ended: logout (reason=logout)
   Open --> Ended: idle > 30 min, detected on next request or by sweep (reason=timeout, ended_at = last_seen_at + 30m)
+  Open --> Ended: now ≥ expires_at (login + 12 h, not reset by switch) (reason=expired, ended_at = expires_at)
   Open --> Ended: switch profile (reason=profile_switch) → new Open session, cookie rotated
   Ended --> [*]
 ```
@@ -189,10 +191,10 @@ export function toExpression(tokens: readonly Token[], o?: { substituteAns: Deci
 // ---- domain [R2+] ----
 export type ProfileSettings = { decimalPlaces: number | null; theme: "light" | "dark" | "system" };
 export type Profile = { id: ProfileId; accountId: AccountId; name: string; settings: ProfileSettings; createdAt: Date };
-export type SessionEnd = { at: Date; reason: "logout" | "timeout" | "profile_switch" };
+export type SessionEnd = { at: Date; reason: "logout" | "timeout" | "expired" | "profile_switch" };
 export type Session = {
   id: SessionId; accountId: AccountId; profileId: ProfileId;
-  startedAt: Date; lastSeenAt: Date; end: SessionEnd | null;
+  startedAt: Date; lastSeenAt: Date; expiresAt: Date; end: SessionEnd | null;
 };
 export type Calculation = {
   id: CalculationId; profileId: ProfileId; sessionId: SessionId;
