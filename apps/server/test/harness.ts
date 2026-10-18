@@ -28,7 +28,7 @@ export function fakeClock(start = new Date("2026-10-18T08:00:00Z")) {
 }
 
 export async function makeApp(db: Db, now: () => Date) {
-  return buildApp({ db, appOrigin: ORIGIN, now, authRateLimit: 1000 });
+  return buildApp({ db, appOrigin: ORIGIN, now }); // production default: 30 auth requests/min per IP
 }
 
 type App = Awaited<ReturnType<typeof makeApp>>;

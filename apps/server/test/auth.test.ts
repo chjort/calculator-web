@@ -223,6 +223,16 @@ describe("session lifetime (ADR 0003 + R2 amendment)", () => {
   });
 });
 
+describe("per-IP backstop (ADR 0005)", () => {
+  it("allows 30 /api/auth/* requests per minute per IP, then 429 rate_limited", async () => {
+    const c = client(app);
+    for (let i = 0; i < 30; i++) expect((await c.call("POST", "/api/auth/logout")).statusCode).toBe(204);
+    const res = await c.call("POST", "/api/auth/logout");
+    expect(res.statusCode).toBe(429);
+    expect(errorCode(res)).toBe("rate_limited");
+  });
+});
+
 describe("CSRF (ARCHITECTURE §7, R2.md §4)", () => {
   const signup = { email: "a@b.io", password: "correct horse battery" };
   it("rejects a cross-site Origin, a missing Origin without Sec-Fetch-Site, and non-JSON bodies", async () => {
