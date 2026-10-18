@@ -4,7 +4,7 @@ import fastifyStatic from "@fastify/static";
 import {
   AnsRequest, LoginRequest, ProfileNameRequest, ProfileSettings, SignupRequest, type ErrorResponse,
 } from "@calc/contracts";
-import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
 import { createAuth, type Resolved } from "../auth/auth";
 import type { Db } from "../db/client";
@@ -15,7 +15,10 @@ import { createProfiles } from "../profiles/profiles";
 export const COOKIE = "__Host-sid";
 const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: "lax", path: "/" } as const; // no Max-Age: session cookie
 
-export type AppOptions = { db: Db; appOrigin: string; now?: Clock; webDist?: string; logger?: boolean; authRateLimit?: number };
+export type AppOptions = {
+  db: Db; appOrigin: string; now?: Clock; webDist?: string; logger?: boolean; authRateLimit?: number;
+  https?: { key: Buffer; cert: Buffer };
+};
 
 declare module "fastify" {
   interface FastifyRequest { auth: Resolved | null }
@@ -49,7 +52,7 @@ export async function buildApp(o: AppOptions) {
   const now = o.now ?? (() => new Date());
   const auth = createAuth(o.db, now);
   const profiles = createProfiles(o.db, now);
-  const app = Fastify({ logger: o.logger ?? false, trustProxy: false });
+  const app = Fastify({ logger: o.logger ?? false, trustProxy: false, ...(o.https ? { https: o.https } : {}) }) as unknown as FastifyInstance;
 
   await app.register(cookie);
   await app.register(rateLimit, {
