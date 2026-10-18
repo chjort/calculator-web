@@ -11,11 +11,12 @@ export type SessionVerdict =
   | { kind: "active"; touch: boolean }
   | { kind: "ended"; reason: "expired" | "timeout"; endedAt: Date };
 
-/** Order follows R2.md §2: the 12 h cap is checked first, then the 30 min idle rule. */
+/** Records whichever deadline passed first (Architect, PR #26): idle timeout before the 12 h cap is `timeout`. */
 export function classifySession(s: SessionTimes, now: Date): SessionVerdict {
-  if (now.getTime() >= s.expiresAt.getTime()) return { kind: "ended", reason: "expired", endedAt: s.expiresAt };
   const idleDeadline = s.lastSeenAt.getTime() + IDLE_MS;
-  if (now.getTime() > idleDeadline) return { kind: "ended", reason: "timeout", endedAt: new Date(idleDeadline) };
+  const idleFirst = idleDeadline < s.expiresAt.getTime();
+  if (idleFirst && now.getTime() > idleDeadline) return { kind: "ended", reason: "timeout", endedAt: new Date(idleDeadline) };
+  if (now.getTime() >= s.expiresAt.getTime()) return { kind: "ended", reason: "expired", endedAt: s.expiresAt };
   return { kind: "active", touch: now.getTime() - s.lastSeenAt.getTime() > LAST_SEEN_THROTTLE_MS };
 }
 

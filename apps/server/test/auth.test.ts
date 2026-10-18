@@ -191,6 +191,18 @@ describe("session lifetime (ADR 0003 + R2 amendment)", () => {
     expect(new Date(rows.rows[0]!.ended_at).toISOString()).toBe("2026-10-18T08:30:00.000Z");
   });
 
+  it("idle before the 12 h cap, first seen after it -> 401 session_expired, end_reason timeout", async () => {
+    const c = client(app);
+    await c.signup();
+    clock.advance(13 * 60 * MIN);
+    const res = await c.call("GET", "/api/me");
+    expect(res.statusCode).toBe(401);
+    expect(errorCode(res)).toBe("session_expired");
+    const rows = await db.execute<{ end_reason: string; ended_at: Date }>(sql`SELECT end_reason, ended_at FROM session`);
+    expect(rows.rows[0]!.end_reason).toBe("timeout");
+    expect(new Date(rows.rows[0]!.ended_at).toISOString()).toBe("2026-10-18T08:30:00.000Z");
+  });
+
   it("touch keeps an active user logged in but never extends the 12 h cap", async () => {
     const c = client(app);
     const me = await c.signup();

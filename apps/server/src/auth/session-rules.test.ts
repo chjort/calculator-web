@@ -17,6 +17,10 @@ describe("session rules (ADR 0003)", () => {
   it("12 h cap ends with expired at expires_at, checked first", () => {
     expect(classifySession({ lastSeenAt: at(12 * 60 - 1), expiresAt: s.expiresAt }, at(12 * 60))).toEqual({ kind: "ended", reason: "expired", endedAt: s.expiresAt });
   });
+  it("idle before the 12 h cap but first seen after it: timeout at last_seen_at + 30 min", () => {
+    const idled = { lastSeenAt: at(60), expiresAt: s.expiresAt };
+    expect(classifySession(idled, at(13 * 60))).toEqual({ kind: "ended", reason: "timeout", endedAt: at(90) });
+  });
   it("SessionInfo exposes both deadlines", () => {
     expect(sessionInfo(s)).toEqual({ expiresAt: "2026-10-18T20:00:00.000Z", idleExpiresAt: "2026-10-18T08:30:00.000Z" });
   });
