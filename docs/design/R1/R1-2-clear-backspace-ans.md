@@ -125,11 +125,11 @@ All keys use R1-1 §3.3 sizes and states. They are **function** keys: bg #E1E4E8
 
 | Key | Position | Visible label | Accessible name | Notes |
 |---|---|---|---|---|
-| Clear | row 1, col 1 | `C` or `AC` (§1.1) | `Clear` (C) / `All clear` (AC) | Label and name swap together. The key width is fixed so the grid never shifts |
-| Backspace | row 1, col 4 | ⌫ icon (24px, `aria-hidden`) + tooltip "Backspace" | `Backspace` | `title` is not relied on. The name comes from `aria-label` |
-| Ans | row 6, col 1 | `Ans` | `Ans, insert last result` when set (status row shows the value) / same name + `aria-disabled="true"` when empty | Stays focusable when disabled (dashed border, text #4A5260 = 6.17:1) |
+| Clear | row 1, col 1 | `C` or `AC` (§1.1) | `C, clear` (C) / `AC, all clear` (AC) | The name starts with the visible text (D13). Label and name swap together. The key width is fixed so the grid never shifts |
+| Backspace | row 1, col 4 | ⌫ icon (24px, `aria-hidden`) + tooltip "Backspace" | `Backspace` | Symbol key, so the name stays descriptive (D13). `title` is not relied on. The name comes from `aria-label` |
+| Ans | row 6, col 1 | `Ans` | `Ans, previous answer` when set (status row shows the value) / same name + `aria-disabled="true"` when empty | The name starts with the visible text (D13). Stays focusable when disabled (dashed border, text #4A5260 = 6.17:1) |
 
-**Status row** (display row 1, R1-1 §3.2): `Ans = {value}` at 14px/400 text-secondary (7.08:1), left-aligned. Height is reserved even when empty, so the layout never jumps. The value uses R1-1 §3.5 formatting. It is not a live region. Its content is read with the display group in browse mode.
+**Status row** (display row 1, R1-1 §3.2): `Ans = {value}` at 14px/400 text-secondary (7.08:1), left-aligned. Height is reserved even when empty, so the layout never jumps. The value uses R1-1 §3.5 formatting. It is not a live region. Its content is read with the display group in browse mode. It has **no aria-label**, so its accessible text is exactly the visible `Ans = 15` (D13). If it is ever given a label, the label must start with "Ans =".
 
 **Ans token in the expression**: it is rendered as the literal text `Ans` (same weight as the numbers) and behaves as one token for editing.
 
@@ -170,7 +170,7 @@ All keys use R1-1 §3.3 sizes and states. They are **function** keys: bg #E1E4E8
 | Backspace after error | undo `=`: `8 ÷ 0`, ready to fix |
 | Backspace in Hint | removes the last token and the hint (`3 +` → `3`). The incomplete attempt was already saved to history as an error entry when `=` was pressed (R3 forward requirement, D3). Backspace does not remove it |
 | Ans when empty | no-op + hint "No previous result yet" + announcement |
-| Ans after digit / `)` / Ans | implicit ×: `5` → `5 × Ans` · `Ans` → `Ans × Ans` |
+| Ans after digit / `)` / `%` / Ans | implicit ×: `5` → `5 × Ans` · `50%` → `50% × Ans` (D14) · `Ans` → `Ans × Ans` |
 | Digit / `(` / `.` after Ans | implicit ×: `Ans × 5`, `Ans × (`, `Ans × 0.` |
 | Ans in Result state | starts a new expression `Ans` |
 | Operator in Result state | starts `Ans op` (chaining); same in Error state if Ans is set |
@@ -185,14 +185,14 @@ All keys use R1-1 §3.3 sizes and states. They are **function** keys: bg #E1E4E8
 
 | Element | Visible | Accessible name / announcement |
 |---|---|---|
-| Clear key (content) | `C` | name `Clear` · on press: "Cleared" |
-| Clear key (empty) | `AC` | name `All clear` · on press: "All cleared. Last result removed." |
+| Clear key (content) | `C` | name `C, clear` · on press: "Cleared" |
+| Clear key (empty) | `AC` | name `AC, all clear` · on press: "All cleared. Last result removed." |
 | Backspace key | ⌫ | name `Backspace` · on press: "Deleted {spoken token}", e.g. "Deleted 3", "Deleted plus", "Deleted Ans". When the expression empties: "Deleted 3. Empty." |
 | Backspace after result/error | — | "Editing {spoken expression}" |
-| Ans key | `Ans` | name `Ans, insert last result` · on press: "Ans" (and implicit × if any: "times, Ans") |
+| Ans key | `Ans` | name `Ans, previous answer` · on press: "Ans" (and implicit × if any: "times, Ans") |
 | Ans empty hint | ⓘ No previous result yet | "No previous result yet" |
-| Status row | Ans = 15 | (not live; read in browse mode as "Ans = 15") |
-| Shortcut list (in R1-1 "Keyboard shortcuts") | `Esc` / `Delete` Clear · `Backspace` Delete last · `A` Ans | — |
+| Status row | Ans = 15 | no aria-label; not live; read in browse mode as "Ans = 15" (D13) |
+| Shortcut list (in R1-1 "Keyboard shortcuts") | `Esc` / `Delete` C / AC · `Backspace` Delete last · `A` Ans | — |
 
 ---
 
@@ -212,13 +212,14 @@ The pressed on-screen key flashes its Pressed state for 100ms when a hardware ke
 
 ## 8. Accessibility notes
 
-1. All three are native `<button type="button">` with stable accessible names. The C↔AC swap changes both label and `aria-label` together, focus stays on the key, and the result is announced (4.1.2).
-2. Ans uses `aria-disabled="true"` (not the `disabled` attribute), so keyboard and screen-reader users can still reach it and hear *why* nothing happens.
-3. Disabled state is shown with a dashed border and secondary text, plus the status row being empty. It is not colour alone (1.4.1).
-4. Every action announces through the single `role="status"` polite region from R1-1 §8.2. The visible display updates at the same time.
-5. Icon-only ⌫ has an accessible name and a visible tooltip on hover/focus. The tooltip can be dismissed with Esc without moving focus and stays while hovered (1.4.13). Esc closes the tooltip first, if one is open, before acting as Clear.
-6. Targets ≥ 56×56px. Reduced motion, zoom 200% and 320px reflow are as in R1-1 §8. The status row wraps rather than truncating `Ans = 1.23456789012e+15`.
-7. No time limits. The "No previous result yet" hint stays until the next key; it does not auto-dismiss on a timer.
+1. All three are native `<button type="button">` with stable accessible names. The C↔AC swap changes both label and `aria-label` together ("C, clear" ↔ "AC, all clear"), focus stays on the key, and the result is announced (4.1.2).
+2. **Label in Name** (2.5.3, D13): text keys have names that start with their visible text: "C, clear", "AC, all clear", "Ans, previous answer". Voice users can say "click AC" or "click Ans". The ⌫ key shows a symbol, so it keeps the name "Backspace". axe's label-in-name check (`label-content-name-mismatch`) must stay enabled.
+3. Ans uses `aria-disabled="true"` (not the `disabled` attribute), so keyboard and screen-reader users can still reach it and hear *why* nothing happens.
+4. Disabled state is shown with a dashed border and secondary text, plus the status row being empty. It is not colour alone (1.4.1).
+5. Every action announces through the single `role="status"` polite region from R1-1 §8.2. The visible display updates at the same time.
+6. Icon-only ⌫ has an accessible name and a visible tooltip on hover/focus. The tooltip can be dismissed with Esc without moving focus and stays while hovered (1.4.13). Esc closes the tooltip first, if one is open, before acting as C / AC.
+7. Targets ≥ 56×56px. Reduced motion, zoom 200% and 320px reflow are as in R1-1 §8. The status row wraps rather than truncating `Ans = 1.23456789012e+15`.
+8. No time limits. The "No previous result yet" hint stays until the next key; it does not auto-dismiss on a timer.
 
 ---
 
@@ -226,9 +227,9 @@ The pressed on-screen key flashes its Pressed state for 100ms when a hardware ke
 
 | AC (#2) | Covered by | Notes |
 |---|---|---|
-| A clear (C/AC) action resets the current expression | §1.1 flow, §3 Clear key, §4 A1/A4, §5 C/AC rows, §6 copy | two-level C → AC (**D8**) |
+| A clear (C/AC) action resets the current expression | §1.1 flow, §3 Clear key, §4 A1/A4, §5 C/AC rows, §6 copy | two-level C → AC (**D8**); names "C, clear" / "AC, all clear" (**D13**) |
 | Backspace removes the last entered character | §1.2 flow, §3, §5 Backspace rows, §6 | Ans token deleted whole (**D9**); after result or error = undo `=` (**D10**); after an incomplete `=` the history error entry stays (**D3**) |
-| The last result can be inserted into a new expression (e.g. an Ans key) | §1.3 flow, §2.1–2.3, §3 Ans + status row, §4 A1–A9, §5 Ans rows | page-only in R1, per profile from R2 (**D11**); history stores the substituted value (**D12**) |
+| The last result can be inserted into a new expression (e.g. an Ans key) | §1.3 flow, §2.1–2.3, §3 Ans + status row, §4 A1–A9, §5 Ans rows | page-only in R1, per profile from R2 (**D11**); history stores the substituted value (**D12**); name "Ans, previous answer" (**D13**); Ans after `%` gets a visible × (**D14**) |
 | All actions available via both keyboard and mouse | §7 keyboard, R1-1 §7, §8 | |
 
 ---
@@ -246,6 +247,8 @@ None. All resolved by the PO on 2026-10-18 (§11).
 | D10 | Backspace after a result or error | "Undo `=`": the expression comes back for editing, and nothing else is removed |
 | D11 | Ans lifetime | In memory for the page only in R1 (lost on reload). From R2, Ans is per active profile, so switching profile clears it |
 | D12 | History of Ans expressions (R3 #6) | Saved entries store the substituted value (`15 × 2`, not `Ans × 2`). The live display may still show `Ans` |
+| D13 | Label in Name (WCAG 2.5.3), 2026-10-18 | Agreed with the Developer within the PO-approved scope (review of PR #15). Names start with the visible text: `C, clear`, `AC, all clear`, `Ans, previous answer`. ⌫ keeps "Backspace". The `Ans = …` row has no aria-label. axe's label-in-name check stays enabled. Full rule: R1-1 §11 |
+| D14 | `%` implicit ×, 2026-10-18 | Agreed with the Developer within the PO-approved scope. `%` is a postfix like `)`, so `50% Ans` → `50% × Ans`. Full rule: R1-1 §11 |
 | D1–D7 | Shared decisions | See R1-1 §11. This includes **D3**: `=` on an incomplete expression shows "Finish the expression" **and** is saved to history as an error entry (R3 forward requirement), and **D7**: WCAG 2.2 AA is the bar |
 
 ## 12. History notes: forward requirements for R3
