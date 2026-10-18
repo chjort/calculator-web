@@ -12,7 +12,9 @@ We need +, −, ×, ÷, %, parentheses, at least 12 significant digits, and a cl
 4. IEEE-754 doubles, rounded on display.
 
 ## Decision
-Option 3. `packages/engine` exports only `evaluate(expr): Evaluation` (total, never throws) and `format()`. `Evaluation` is a `success | error` discriminated union with a `CalcErrorCode`. Arithmetic uses decimal.js at precision 34 and displays 12 significant digits. Limits: 500 chars, nesting depth 100. The tokenizer normalizes `× ÷ −`. The browser evaluates for display. The server re-evaluates on `POST /calculations` and stores its own result.
+Option 3. `packages/engine` exports only `evaluate(expr, { ans }): Evaluation` (total, never throws) and `format()`. `Evaluation` is a `success | error` discriminated union with a `CalcErrorCode`. Arithmetic uses decimal.js at precision 34 and displays 12 significant digits. Limits: 500 chars, nesting depth 100. The tokenizer normalizes `× ÷ −`. `%` is postfix `x ÷ 100`, so `200 + 10% = 200.1` (matches the Designer spec; pending PO). `Ans` is a grammar primary resolved from `ctx.ans` at evaluation.
+
+The web editor is **token-based** (`Token` union: digit, point, operator, unary minus, `%`, bracket, Ans), per the Designer specs R1-1/R1-2. Input is guarded, so invalid keys are no-ops. Backspace pops one token, so Ans goes in one step. Implicit × and auto-closed `)` become real, visible tokens, and incomplete expressions show a hint instead of being evaluated. A single `toExpression(tokens)` serializer turns tokens into the engine string. The browser evaluates for display. The server re-evaluates on `POST /calculations` and stores its own result.
 
 ## Consequences
 - + No code-injection surface. The grammar is about 30 lines and fully testable with golden tables.
@@ -20,4 +22,6 @@ Option 3. `packages/engine` exports only `evaluate(expr): Evaluation` (total, ne
 - + The error union maps directly onto the history row (`status`, `error_code`, `error_message`).
 - + R4 functions add one `primary` rule. `domain` is already an error code.
 - − We maintain a parser. Option 2 lost on bundle size and because it is far larger than the attack surface we need. Option 1 is unsafe.
-- Open: the meaning of `%` (percent or modulo) is a single grammar rule and has to be decided before #1 is built.
+- + Tokens make backspace-by-token and the one-step Ans trivial, and keep the grammar free of implicit-× rules.
+- − History stores `ans` next to the expression (`Ans × 2` alone can't be reproduced). The server takes `ans` from the client, which is fine because it is the user's own previous result.
+- Open: `%` = ÷100 still needs PO confirmation. It is a single grammar rule.

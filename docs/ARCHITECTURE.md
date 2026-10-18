@@ -1,6 +1,7 @@
 # Calculator Web – Architecture
 
 Status: **Proposed (In Review)** · Owner: Architect · Scope: whole roadmap (R1–R4), R1 (#1, #2) first.
+UX specs (Designer, on the shared computer and not yet in the repo): `product/design/R1-1-basic-arithmetic.md` (#1) · `product/design/R1-2-clear-backspace-ans.md` (#2). They own behaviour and copy; this doc only gives them a shape.
 Decisions: [ADR 0001 stack](adr/0001-stack-and-repo-layout.md) · [0002 evaluation](adr/0002-expression-evaluation.md) · [0003 auth/sessions](adr/0003-auth-and-profile-sessions.md) · [0004 history/retention](adr/0004-history-storage-and-retention.md)
 
 Legend: **[R1]** build now · **[R2]** accounts/profiles · **[R3]** sessions/history · **[R4]** polish
@@ -91,7 +92,8 @@ erDiagram
     uuid id PK
     uuid profile_id FK
     uuid session_id FK
-    text expression "as entered, max 500 chars"
+    text expression "canonical text, may contain Ans, max 500 chars"
+    text ans "decimal string Ans resolved to; null if unused"
     text status "success|error"
     text result "decimal string; null iff error"
     text error_code "null iff success"
@@ -152,23 +154,33 @@ export type Evaluation =
   | { status: "success"; value: DecimalString }
   | { status: "error"; error: CalcError };
 
-export function evaluate(expression: string): Evaluation;                 // total: never throws
-export function format(v: DecimalString, o?: { decimalPlaces?: number }): string; // ≤12 sig. digits
+export function evaluate(expression: string, ctx: { ans: DecimalString | null }): Evaluation; // total: never throws; `Ans` resolves to ctx.ans
+export function format(v: DecimalString, o?: { decimalPlaces?: number }): string; // ≤12 sig. digits; scientific at ≥1e12 or <1e-6 (spec Q2)
 
-// ---- apps/web editor [R1]: one pure reducer, buttons & keyboard dispatch the same actions ----
-export type EditorState = {
-  expression: string;
-  lastResult: DecimalString | null;   // source for Ans (#2)
-  shown: Evaluation | null;           // last evaluation on screen
-};
+// ---- apps/web editor [R1]: token-based, one pure reducer; buttons & keyboard dispatch the same actions ----
+// Behaviour is the Designer spec (R1-1 §1.3/§5, R1-2 §1); this is only its shape.
+export type Token =
+  | { kind: "digit"; d: "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9" }
+  | { kind: "point" }
+  | { kind: "op"; op: "+" | "−" | "×" | "÷" }
+  | { kind: "neg" }                         // unary minus, distinct from op "−"
+  | { kind: "percent" }
+  | { kind: "paren"; side: "(" | ")" }
+  | { kind: "ans" };                        // ONE token; resolves to `ans` at evaluation
+export type EditorState =
+  | { mode: "empty" }                                         // shows 0
+  | { mode: "typing" | "hint"; tokens: readonly Token[] }     // hint = "Finish the expression"
+  | { mode: "result"; tokens: readonly Token[]; value: DecimalString }
+  | { mode: "error"; tokens: readonly Token[]; error: CalcError };
+export type Editor = { state: EditorState; ans: DecimalString | null }; // Ans never holds an error
 export type EditorAction =
-  | { type: "insert"; text: string }  // digit/operator/paren/"."
-  | { type: "backspace" }             // drop last char (#2)
-  | { type: "clear" }                 // C/AC (#2)
-  | { type: "insertAns" }             // inserts lastResult digits (#2)
-  | { type: "evaluate" };             // "=" / Enter
-export function reduce(s: EditorState, a: EditorAction): EditorState;
-// KEYS: one table {id,label,action,keyboard[]} renders the keypad AND builds the keydown map.
+  | { type: "input"; token: Token }  // guarded: invalid keys are no-ops; implicit × inserted as a real token
+  | { type: "backspace" }            // pops the last token (whole Ans); in result/error: undo the "="
+  | { type: "clear" }                // C: empty display; AC (already empty): also ans = null
+  | { type: "evaluate" };            // "=" / Enter: incomplete → hint; auto-close ")" then evaluate()
+export function reduce(e: Editor, a: EditorAction): Editor;
+export function toExpression(tokens: readonly Token[]): string; // the ONE serializer, e.g. "Ans × −2"
+// KEYS: one table {id,label,token|action,keyboard[]} renders the keypad AND builds the keydown map.
 
 // ---- domain [R2+] ----
 export type ProfileSettings = { decimalPlaces: number | null; theme: "light" | "dark" | "system" };
@@ -180,7 +192,7 @@ export type Session = {
 };
 export type Calculation = {
   id: CalculationId; profileId: ProfileId; sessionId: SessionId;
-  expression: string; createdAt: Date;
+  expression: string; ans: DecimalString | null; createdAt: Date;
 } & (
   | { status: "success"; result: DecimalString }
   | { status: "error"; error: CalcError }
@@ -202,7 +214,7 @@ DB rows → domain via one `parseCalculationRow()` per table (reject rows that v
 | R2 | `GET /me` | account, profiles, active profile |
 | R2 | `POST /profiles` · `PATCH /profiles/:id` · `DELETE /profiles/:id` | scoped by AccountScope; 404 if not yours |
 | R2 | `POST /profiles/:id/activate` | ends session (`profile_switch`), opens new one, rotates cookie |
-| R3 | `POST /calculations` `{expression}` → `Calculation` | server re-evaluates with `engine`; client result never trusted |
+| R3 | `POST /calculations` `{expression, ans}` → `Calculation` | server re-evaluates with `engine` (`Ans` := `ans`); client result never trusted; `ans` stored so the entry stays reproducible |
 | R3 | `GET /calculations?q=&before=&limit=` | newest first, keyset pagination, active profile only |
 | R3 | `DELETE /calculations/:id` · `DELETE /calculations` | single / clear all (active profile) |
 | R4 | `GET /calculations.csv?q=` | same query as list; streamed |
@@ -219,14 +231,14 @@ DB rows → domain via one `parseCalculationRow()` per table (reject rows that v
 ## 8. R1 build order (#1, #2)
 1. Scaffold: pnpm workspace, strict TS, ESLint, Vitest, Playwright, CI.
 2. `packages/engine`: grammar below, golden tests (precision, `÷0`, parens, `%`).
-3. `apps/web`: `reduce()` + KEYS table + keypad + keyboard handler; e2e in 4 browsers.
+3. `apps/web`: token `reduce()` + `toExpression()` + KEYS table + keypad + keyboard handler; spec scenario tables (R1-1 §4–5, R1-2) become reducer unit tests; e2e in 4 browsers.
 
-R1 grammar (precedence low→high): `expr := term (("+"|"-") term)*` · `term := unary (("*"|"/"|"×"|"÷") unary)*` · `unary := ("-"|"+") unary | postfix` · `postfix := primary "%"?` · `primary := number | "(" expr ")"`. `−` and `×`/`÷` glyphs normalized in the tokenizer. Nothing in R1 blocks R2–R4: functions (R4) add one `primary` alternative.
+R1 grammar (precedence low→high): `expr := term (("+"|"-") term)*` · `term := unary (("*"|"/"|"×"|"÷") unary)*` · `unary := ("-"|"+") unary | postfix` · `postfix := primary "%"?` (`x% = x ÷ 100`, so `200 + 10% = 200.1`; matches spec Q1, pending PO) · `primary := number | "Ans" | "(" expr ")"`. `−` and `×`/`÷` glyphs normalized in the tokenizer. Implicit × and auto-closed `)` are produced by the editor as real tokens, so the grammar stays free of them. Nothing in R1 blocks R2–R4: functions (R4) add one `primary` alternative.
 
-## 9. Open questions
-1. **`%` semantics** (PO/Designer): postfix percent (`50% = 0.5`) is assumed. Calculator-style `200+10% = 220`, or modulo? This is one grammar rule, so changing it is cheap but must be decided before #1 is built.
-2. **Ans** (Designer): assumed to insert the last result's *digits* into the expression (no hidden variable, backspace works per char, history entries stand alone). Alternative: an `Ans` token. Please confirm.
-3. **Active profile at login**: assumed to be the last used profile. OK?
-4. **Idle timeout = forced re-login**: assumed, since sessions are both auth and grouping. OK?
-5. **CSV-injection guard** prefixes `'` to expression cells starting with `-`, so `-5+3` exports as `'-5+3`. Accept that, or only guard `= + @`?
-6. No Designer specs found under `/workspace/product` yet. Layout and visual rules are left to Designer.
+## 9. Open questions (for PO)
+1. **`%` semantics**: `x% = x ÷ 100` (`200 + 10% = 200.1`). This matches the Designer spec (R1-1 Q1) but still needs PO confirmation. Alternatives are calculator-style `200 + 10% = 220` or modulo. It's one grammar rule, so it's cheap to change, but it must be decided before #1 is built.
+2. **Active profile at login**: assumed to be the last used profile. OK?
+3. **Idle timeout = forced re-login**: assumed, since sessions are both auth and grouping. OK?
+4. **CSV-injection guard** prefixes `'` to expression cells starting with `-`, so `-5+3` exports as `'-5+3`. Accept that, or only guard `= + @`?
+5. **CSV and `Ans`**: entries such as `Ans × 2` are stored with the `ans` value they used. Should CSV add an `ans` column (proposed), or substitute the value into the expression?
+6. The Designer spec's own PO questions (R1-1 Q2–Q7: display digits, incomplete `=`, repeated `=`, Enter, locale, WCAG 2.2) are UX decisions. The architecture works with the recommended defaults.
