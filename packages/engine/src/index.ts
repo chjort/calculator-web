@@ -1,2 +1,2 @@
 export type { CalcError, CalcErrorCode, DecimalString, Evaluation } from "./types";
-export { evaluate, format } from "./evaluate";
+export { ENGINE_CONFIG, evaluate, format, parseDecimalString, toDecimalString } from "./evaluate";

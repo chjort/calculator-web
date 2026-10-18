@@ -1,4 +1,4 @@
-import { format } from "@calc/engine";
+import { format, type DecimalString } from "@calc/engine";
 import { describe, expect, it } from "vitest";
 import { COPY, initialEditor, reduce, toExpression, type Editor } from "./editor";
 import { KEYS } from "./keys";
@@ -124,9 +124,11 @@ describe("#1 AC2: results accurate to 12 significant digits", () => {
     expect(shows("1 ÷ 3 = × 3 =")[1]).toBe("1");
   });
 
-  it("S6: overflow shows Number too large", () => {
+  it("S6: overflow shows Number too large (beyond 9.99…e9999, ADR 0008)", () => {
     let e = press("9 9 9 9 9 9 9 9 9 9 9 9 =");
     for (let i = 0; i < 9; i++) e = press("× 9 9 9 9 9 9 9 9 9 9 9 9 =", e);
+    expect(view(e)[1]).toBe("9.9999999999e+119");
+    e = press("Ans × 1 0 =", { ...initialEditor, ans: "9e+9999" as DecimalString });
     expect(view(e)[1]).toBe("Error: Number too large");
   });
 });
@@ -228,7 +230,7 @@ describe("#2 AC3: the last result can be inserted (Ans)", () => {
     expect(view(r)[2]).toBe("Ans = −7");
     expect(shows("5 − Ans =", r)[1]).toBe("12");
     const typed = press("5 − Ans", r).state;
-    expect(typed.mode === "typing" && toExpression(typed.tokens, { substituteAns: r.ans! })).toBe("5 − (-7)");
+    expect(typed.mode === "typing" && toExpression(typed.tokens, { substituteAns: r.ans! })).toBe("5 − (-7e+0)"); // canonical Ans in the D12 save form (ADR 0008)
   });
   it("Ans when empty: no-op + hint until next key", () => {
     const e = press("Ans");
