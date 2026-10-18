@@ -125,6 +125,30 @@ describe("#4 AC1: create, rename and delete profiles", () => {
     expect(m.switchOnDeleteProfileId).toBe(first.activeProfileId);
   });
 
+  it("delete-active picks the most recently used remaining profile even beyond the 50 newest sessions (ADR 0007)", async () => {
+    const { c } = await signedUp(); // Default
+    clock.advance(MIN);
+    const work = me(await c.call("POST", "/api/profiles", { name: "Work" }));
+    clock.advance(MIN);
+    const homework = me(await c.call("POST", "/api/profiles", { name: "Homework" }));
+    const workId = homework.profiles.find((p) => p.name === "Work")!.id;
+    clock.advance(MIN);
+    await c.call("POST", `/api/profiles/${workId}/activate`); // Work is now newer than Default
+    clock.advance(MIN);
+    await c.call("POST", `/api/profiles/${homework.activeProfileId}/activate`);
+    // 55 newer (ended) sessions, all on Homework, e.g. from other devices
+    await db.execute(sql`
+      INSERT INTO session (account_id, profile_id, token_hash, started_at, last_seen_at, expires_at, ended_at, end_reason)
+      SELECT ${homework.account.id}, ${homework.activeProfileId}, sha256(('t' || g)::bytea),
+             now() + g * interval '1 minute', now() + g * interval '1 minute', now() + interval '1 day', now() + g * interval '1 minute', 'logout'
+      FROM generate_series(1, 55) g`);
+    const before = await c.me();
+    expect(before.activeProfileId).toBe(homework.activeProfileId);
+    expect(before.switchOnDeleteProfileId).toBe(work.activeProfileId);
+    const res = await c.call("DELETE", `/api/profiles/${homework.activeProfileId}`);
+    expect(me(res).activeProfileId).toBe(work.activeProfileId);
+  });
+
   it("the last profile can't be deleted", async () => {
     const { c, first } = await signedUp();
     const res = await c.call("DELETE", `/api/profiles/${first.activeProfileId}`);
