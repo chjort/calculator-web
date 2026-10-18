@@ -1,0 +1,33 @@
+{
+  "name": "@calc/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "migrate": "tsx src/db/migrate-cli.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json",
+    "check:schema": "vitest run test/schema-drift.test.ts"
+  },
+  "dependencies": {
+    "@calc/contracts": "workspace:*",
+    "@calc/engine": "workspace:*",
+    "@fastify/cookie": "^11.1.3",
+    "@fastify/rate-limit": "^11.2.1",
+    "@fastify/static": "^10.1.6",
+    "@node-rs/argon2": "^2.2.2",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.7",
+    "pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "vitest": "^5.0.5"
+  }
+}

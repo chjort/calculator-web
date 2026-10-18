@@ -1,181 +1,341 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { fakeServer } from "./test/fakeServer";
 
-function setup() {
+let server: ReturnType<typeof fakeServer>;
+const PASSWORD = "correct horse battery";
+
+beforeEach(() => {
+  server = fakeServer();
+  vi.stubGlobal("fetch", server.fetchMock);
+  window.history.replaceState(null, "", "/");
+});
+afterEach(() => vi.unstubAllGlobals());
+
+async function start(path = "/") {
+  window.history.replaceState(null, "", path);
   const user = userEvent.setup();
   render(<App />);
-  const keypad = screen.getByRole("group", { name: "Keypad" });
-  const key = (name: string) => within(keypad).getByRole("button", { name });
-  const click = async (...names: string[]) => { for (const n of names) await user.click(key(n)); };
-  const expression = () => screen.getByTestId("expression").textContent;
-  const result = () => screen.getByTestId("result").textContent;
-  const ansRow = () => screen.getByTestId("ans-row").textContent;
-  const announced = () => screen.getByRole("status").textContent?.trim();
-  return { user, key, click, expression, result, ansRow, announced };
+  await screen.findByRole("heading", { level: 1 });
+  return user;
 }
 
-describe("mouse input (#1 AC4, #2 AC4)", () => {
-  it("computes with the on-screen keypad", async () => {
-    const t = setup();
-    await t.click("1", "2", "Times", "Open parenthesis", "3", "Minus", "1", "Close parenthesis", "Equals");
-    expect(t.expression()).toBe("12 × (3 − 1) =");
-    expect(t.result()).toBe("24");
-    expect(t.ansRow()).toBe("Ans = 24");
-    expect(t.announced()).toBe("12 times open parenthesis 3 minus 1 close parenthesis equals 24");
+const field = (name: RegExp | string) => screen.getByLabelText(name, { selector: "input" });
+const keypad = () => screen.getByRole("group", { name: "Keypad" });
+const key = (name: string) => within(keypad()).getByRole("button", { name });
+const result = () => screen.getByTestId("result").textContent;
+const ansRow = () => screen.getByTestId("ans-row").textContent;
+
+async function axeClean() {
+  const r = await axe.run(document.body, {
+    runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"],
+    rules: { "color-contrast": { enabled: false } },
+  });
+  expect(r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(" | ")}`)).toEqual([]);
+}
+
+async function signUp(user: ReturnType<typeof userEvent.setup>, email = "ana@example.com") {
+  await user.click(screen.getByRole("link", { name: "Create an account" }));
+  await user.type(field("Email"), email);
+  await user.type(field("Password"), PASSWORD);
+  await user.click(screen.getByRole("button", { name: "Create account" }));
+  await screen.findByRole("group", { name: "Keypad" });
+}
+
+async function openSwitcher(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: /, switch profile$/ }));
+  return screen.getByRole("menu");
+}
+
+describe("#3 AC1: an account is always required", () => {
+  it("redirects a visitor to Log in and never renders the calculator", async () => {
+    await start("/");
+    expect(window.location.pathname).toBe("/login");
+    expect(document.title).toBe("Log in – Calculator");
+    expect(screen.getByRole("heading", { level: 1, name: "Log in" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Keypad" })).toBeNull();
+    expect(field("Email")).toHaveFocus();
+    expect(screen.queryByText(/forgot/i)).toBeNull(); // no password reset in R2 (P5)
+    await axeClean();
   });
 
-  it("percent, divide by zero error, backspace, clear, Ans", async () => {
-    const t = setup();
-    await t.click("2", "0", "0", "Plus", "1", "0", "Percent", "Equals");
-    expect(t.result()).toBe("200.1");
-    await t.click("8", "Divided by", "0", "Equals");
-    expect(t.result()).toBe("⚠ Error: Can't divide by zero");
-    expect(t.announced()).toBe("Error: Can't divide by zero");
-    await t.click("Backspace");
-    expect(t.expression()).toBe("8 ÷ 0");
-    await t.click("C, clear");
-    expect(t.result()).toBe("0");
-    expect(t.ansRow()).toBe("Ans = 200.1");
-    await t.click("Ans, previous answer", "Times", "1", "0", "Equals");
-    expect(t.result()).toBe("2001");
-    await t.click("C, clear", "AC, all clear");
-    expect(t.ansRow()).toBe("");
+  it("returns to the requested app path after logging in", async () => {
+    server.seed("ana@example.com", PASSWORD);
+    const user = await start("/settings");
+    expect(window.location.pathname).toBe("/login");
+    await user.type(field("Email"), "ana@example.com");
+    await user.type(field("Password"), PASSWORD);
+    await user.click(screen.getByRole("button", { name: "Log in" }));
+    await screen.findByRole("heading", { level: 1, name: "Profile settings" });
+    expect(window.location.pathname).toBe("/settings");
   });
 
-  it("C/AC label and name swap; Ans is aria-disabled when empty but focusable", async () => {
-    const t = setup();
-    expect(t.key("AC, all clear")).toHaveTextContent("AC");
-    const ans = t.key("Ans, previous answer");
-    expect(ans).toHaveAttribute("aria-disabled", "true");
-    expect(ans).not.toBeDisabled();
-    await t.click("Ans, previous answer");
-    expect(t.result()).toBe("ⓘ No previous result yet");
-    await t.click("5");
-    expect(t.key("C, clear")).toHaveTextContent("C");
-    await t.click("Equals");
-    expect(t.key("Ans, previous answer")).not.toHaveAttribute("aria-disabled");
-  });
-});
-
-describe("keyboard input (#1 AC4, #2 AC4)", () => {
-  it("focuses the display on load", () => {
-    setup();
-    expect(screen.getByRole("group", { name: "Calculator display" })).toHaveFocus();
-  });
-
-  it("types an expression with the R1-1 §7.1 keymap", async () => {
-    const t = setup();
-    await t.user.keyboard("12*(3-1)/4x2+50%{Enter}");
-    expect(t.expression()).toBe("12 × (3 − 1) ÷ 4 × 2 + 50% =");
-    expect(t.result()).toBe("12.5");
-    await t.user.keyboard("1,5=");
-    expect(t.result()).toBe("1.5");
-  });
-
-  it("Backspace, Escape/Delete (C then AC) and A for Ans", async () => {
-    const t = setup();
-    await t.user.keyboard("12+3{Enter}");
-    await t.user.keyboard("{Backspace}");
-    expect(t.expression()).toBe("12 + 3");
-    await t.user.keyboard("{Backspace}{Backspace}");
-    expect(t.expression()).toBe("12");
-    await t.user.keyboard("{Escape}");
-    expect(t.result()).toBe("0");
-    expect(t.ansRow()).toBe("Ans = 15");
-    await t.user.keyboard("5a{Enter}");
-    expect(t.expression()).toBe("5 × Ans =");
-    expect(t.result()).toBe("75");
-    await t.user.keyboard("{Delete}{Delete}");
-    expect(t.ansRow()).toBe("");
-  });
-
-  it("Enter always evaluates, even with a key focused (D5); Space activates the key", async () => {
-    const t = setup();
-    await t.user.keyboard("2+");
-    act(() => t.key("7").focus());
-    await t.user.keyboard(" ");
-    await t.user.keyboard("{Enter}");
-    expect(t.expression()).toBe("2 + 7 =");
-    expect(t.result()).toBe("9");
-  });
-
-  it("does not intercept Ctrl/Meta/Alt combinations", async () => {
-    const t = setup();
-    await t.user.keyboard("{Control>}a{/Control}{Meta>}1{/Meta}");
-    expect(t.expression()).toBe("");
-  });
-
-  it("Tab order: display, then keys row by row, then shortcuts", async () => {
-    const t = setup();
-    await t.user.tab();
-    expect(t.key("AC, all clear")).toHaveFocus();
-    await t.user.tab();
-    expect(t.key("Open parenthesis")).toHaveFocus();
-    for (let i = 0; i < 21; i++) await t.user.tab();
-    expect(screen.getByText("Keyboard shortcuts")).toHaveFocus();
-  });
-
-  it("Esc closes the Backspace tooltip before clearing", async () => {
-    const t = setup();
-    await t.user.keyboard("12");
-    act(() => t.key("Backspace").focus());
-    expect(screen.getByRole("tooltip", { hidden: true })).toHaveTextContent("Backspace");
-    await t.user.keyboard("{Escape}");
-    expect(screen.queryByRole("tooltip", { hidden: true })).toBeNull();
-    expect(t.expression()).toBe("12");
-    await t.user.keyboard("{Escape}");
-    expect(t.expression()).toBe("");
+  it("shows a 'Can't connect' screen with Try again when the server is unreachable", async () => {
+    server.setOffline(true);
+    window.history.replaceState(null, "", "/");
+    const user = userEvent.setup();
+    render(<App />);
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    expect(screen.getByRole("alert")).toHaveTextContent("Can't connect to Calculator.");
+    server.setOffline(false);
+    await user.click(retry);
+    await screen.findByRole("heading", { level: 1, name: "Log in" });
   });
 });
 
-describe("accessibility (WCAG 2.2 AA, axe)", () => {
-  it.each([
-    ["initial", ""],
-    ["result", "12+3{Enter}"],
-    ["error", "8/0{Enter}"],
-    ["hint", "3+{Enter}"],
-  ])("no axe violations: %s", async (_, keys) => {
-    const t = setup();
-    if (keys) await t.user.keyboard(keys);
-    const r = await axe.run(document.body, { runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"], rules: { "color-contrast": { enabled: false } } });
-    expect(r.violations.map((v) => v.id)).toEqual([]);
+describe("#3 AC2: sign up with email and password", () => {
+  it("validates on submit: inline errors linked to fields, focus on the first invalid field", async () => {
+    const user = await start("/signup");
+    expect(document.title).toBe("Create account – Calculator");
+    expect(field("Password")).toHaveAccessibleDescription("At least 12 characters");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    expect(field("Email")).toHaveAttribute("aria-invalid", "true");
+    expect(field("Email")).toHaveAccessibleDescription("Enter your email address");
+    expect(field("Email")).toHaveFocus();
+    await user.type(field("Email"), "ana@example");
+    await user.type(field("Password"), "short");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    expect(field("Email")).toHaveAccessibleDescription("Enter an email address in the format name@example.com");
+    await user.clear(field("Email"));
+    await user.type(field("Email"), "ana@example.com");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    expect(field("Password")).toHaveAccessibleDescription("At least 12 characters Password must be at least 12 characters");
+    expect(field("Password")).toHaveFocus();
+    expect(server.calls.filter((c) => c.path === "/api/auth/signup")).toHaveLength(0);
+    await axeClean();
   });
 
-  it("landmarks, single polite status region, native buttons", () => {
-    setup();
-    expect(screen.getByRole("banner")).toBeInTheDocument();
-    expect(screen.getByRole("main")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "Calculator" })).toBeInTheDocument();
-    const status = screen.getAllByRole("status");
-    expect(status).toHaveLength(1);
-    expect(status[0]).toHaveAttribute("aria-live", "polite");
-    expect(status[0]).toHaveAttribute("aria-atomic", "true");
-    expect(within(screen.getByRole("group", { name: "Keypad" })).getAllByRole("button")).toHaveLength(22);
-    for (const b of screen.getAllByRole("button")) expect(b).toHaveAttribute("type", "button");
+  it("creates the account and opens the calculator on profile Default with a welcome banner", async () => {
+    const user = await start("/signup");
+    await user.type(field("Email"), "  Ana@Example.com");
+    await user.type(field("Password"), PASSWORD);
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    await screen.findByRole("group", { name: "Keypad" });
+    expect(window.location.pathname).toBe("/");
+    expect(server.calls.find((c) => c.path === "/api/auth/signup")!.body).toEqual({ email: "Ana@Example.com", password: PASSWORD });
+    expect(screen.getByRole("button", { name: "Default, switch profile" })).toBeInTheDocument();
+    expect(screen.getByText(/Account created\. Your first profile is called "Default"\./)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Account created. Your first profile is called Default.");
+    await axeClean();
+    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("button", { name: "Rename profile" })).toBeNull();
+  });
+
+  it("Show/Hide toggles the password; name starts with the visible label (D13)", async () => {
+    const user = await start("/signup");
+    const toggle = screen.getByRole("button", { name: "Show password" });
+    expect(toggle).toHaveTextContent("Show");
+    await user.click(toggle);
+    expect(field("Password")).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Hide password" })).toHaveTextContent("Hide");
+    expect(screen.getByText("Password shown")).toBeInTheDocument();
   });
 });
 
-describe("WCAG 2.5.3 label in name (D13)", () => {
-  it("letter keys: name starts with the visible label; digits: name = digit; symbol keys: descriptive name", async () => {
-    const t = setup();
-    const symbols: Record<string, string> = {
-      "+": "Plus", "−": "Minus", "×": "Times", "÷": "Divided by", "%": "Percent",
-      "(": "Open parenthesis", ")": "Close parenthesis", ".": "Decimal point", "=": "Equals", "⌫": "Backspace",
-    };
-    const check = () => {
-      for (const b of within(screen.getByRole("group", { name: "Keypad" })).getAllByRole("button")) {
-        const text = b.textContent!.replace("Backspace", "");
-        const name = b.getAttribute("aria-label")!;
-        if (/^[A-Za-z]+$/.test(text)) expect(name.startsWith(text), `${text} -> ${name}`).toBe(true);
-        else if (/^\d$/.test(text)) expect(name).toBe(text);
-        else expect(name, text).toBe(symbols[text]);
-      }
-    };
-    check();
-    await t.click("5");
-    check();
+describe("#3 AC3: duplicate sign-up shows a clear error", () => {
+  it("shows 'There's already an account with this email.' on the Email field and keeps the password", async () => {
+    server.seed("ana@example.com", PASSWORD);
+    const user = await start("/signup");
+    await user.type(field("Email"), "ana@example.com");
+    await user.type(field("Password"), "another long password");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(field("Email")).toHaveAttribute("aria-invalid", "true"));
+    expect(field("Email")).toHaveAccessibleDescription(/There's already an account with this email\. Log in instead, or use a different email\./);
+    expect(field("Password")).toHaveValue("another long password");
+    await axeClean();
+  });
+});
+
+describe("log in (#3)", () => {
+  it("wrong credentials: generic alert gets focus, password cleared, email kept", async () => {
+    server.seed("ana@example.com", PASSWORD);
+    const user = await start("/login");
+    await user.type(field("Email"), "ana@example.com");
+    await user.type(field("Password"), "wrong password");
+    await user.click(screen.getByRole("button", { name: "Log in" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Email or password is incorrect.");
+    expect(alert).toHaveFocus();
+    expect(field("Password")).toHaveValue("");
+    expect(field("Email")).toHaveValue("ana@example.com");
+    await axeClean();
+  });
+
+  it("network error keeps all input including the password", async () => {
+    const user = await start("/login");
+    await user.type(field("Email"), "ana@example.com");
+    await user.type(field("Password"), PASSWORD);
+    server.setOffline(true);
+    await user.click(screen.getByRole("button", { name: "Log in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Can't connect. Check your connection and try again.");
+    expect(field("Password")).toHaveValue(PASSWORD);
+  });
+});
+
+describe("#3 AC5: log out ends the authenticated session", () => {
+  it("Account menu → Log out: ends the session on the server and shows the log-in page", async () => {
+    const user = await start("/login");
+    await signUp(user);
+    await user.click(screen.getByRole("button", { name: "Account" }));
+    const menu = screen.getByRole("menu", { name: "Account" });
+    expect(menu).toHaveTextContent("ana@example.com");
+    await axeClean();
+    await user.click(within(menu).getByRole("menuitem", { name: "Log out" }));
+    await screen.findByRole("heading", { level: 1, name: "Log in" });
+    expect(server.calls.some((c) => c.method === "POST" && c.path === "/api/auth/logout")).toBe(true);
+    expect(screen.getByRole("status")).toHaveTextContent("You're logged out.");
+    expect(screen.queryByRole("group", { name: "Keypad" })).toBeNull();
+  });
+
+  it("a 401 session_expired mid-use goes to Log in with the idle banner", async () => {
+    const user = await start("/login");
+    await signUp(user);
+    server.expireSession();
+    server.fetchMock.mockImplementationOnce(async () => new Response(JSON.stringify({ error: { code: "session_expired", message: "x" } }), { status: 401 }));
+    await user.click(key("1"));
+    await user.click(key("Equals"));
+    await screen.findByRole("heading", { level: 1, name: "Log in" });
+    expect(screen.getByRole("status")).toHaveTextContent("You were logged out after 30 minutes of inactivity.");
+  });
+});
+
+describe("#4 AC1: create, rename and delete profiles", () => {
+  it("creates a profile from the switcher; it becomes active; duplicate and empty names get field errors", async () => {
+    const user = await start("/login");
+    await signUp(user);
+    const menu = await openSwitcher(user);
+    expect(within(menu).getByRole("menuitemradio", { name: "Default" })).toHaveAttribute("aria-checked", "true");
+    await axeClean();
+    await user.click(within(menu).getByRole("menuitem", { name: "New profile…" }));
+    const dialog = screen.getByRole("dialog", { name: "New profile" });
+    expect(field("Profile name")).toHaveFocus();
+    await user.click(within(dialog).getByRole("button", { name: "Create profile" }));
+    expect(field("Profile name")).toHaveAccessibleDescription("Up to 40 characters Enter a profile name");
+    await user.type(field("Profile name"), "default");
+    await user.click(within(dialog).getByRole("button", { name: "Create profile" }));
+    await waitFor(() => expect(field("Profile name")).toHaveAccessibleDescription(/You already have a profile called "default"/));
+    await axeClean();
+    await user.clear(field("Profile name"));
+    await user.type(field("Profile name"), "Work{Enter}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByRole("button", { name: "Work, switch profile" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Created and switched to Work.");
+  });
+
+  it("renames and deletes profiles on the settings screen; the last one can't be deleted", async () => {
+    server.seed("ana@example.com", PASSWORD, ["Default", "Work"]);
+    const user = await start("/login");
+    await user.type(field("Email"), "ana@example.com");
+    await user.type(field("Password"), PASSWORD);
+    await user.click(screen.getByRole("button", { name: "Log in" }));
+    await screen.findByRole("group", { name: "Keypad" });
+    await user.click(within(await openSwitcher(user)).getByRole("menuitem", { name: "Profile settings" }));
+    await screen.findByRole("heading", { level: 1, name: "Profile settings" });
+    expect(screen.getByRole("heading", { level: 2, name: "Your profiles (2 of 10)" })).toBeInTheDocument();
+    await axeClean();
+
+    await user.click(screen.getByRole("button", { name: "Rename Work" }));
+    expect(field("Profile name")).toHaveValue("Work");
+    await user.clear(field("Profile name"));
+    await user.type(field("Profile name"), "Homework");
+    await user.click(screen.getByRole("button", { name: "Save name" }));
+    await screen.findByRole("button", { name: "Rename Homework" });
+    expect(screen.getByRole("status")).toHaveTextContent("Renamed to Homework.");
+
+    await user.click(screen.getByRole("button", { name: "Delete Default" }));
+    const confirm = screen.getByRole("alertdialog", { name: 'Delete "Default"?' });
+    expect(within(confirm).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    expect(confirm).toHaveAccessibleDescription(/permanently deletes the profile "Default"/);
+    expect(confirm).toHaveAccessibleDescription(/You're using this profile\. After deleting it you'll switch to "Homework"\./);
+    await axeClean();
+    await user.click(within(confirm).getByRole("button", { name: "Delete profile" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.getByRole("status")).toHaveTextContent("Deleted Default. Switched to Homework.");
+    const del = screen.getByRole("button", { name: "Delete Homework" });
+    expect(del).toHaveAttribute("aria-disabled", "true");
+    expect(del).toHaveAccessibleDescription("You need at least one profile, so this one can't be deleted.");
+    await user.click(del);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+});
+
+describe("#4 AC2: switch the active profile at any time", () => {
+  it("switching clears the display and shows that profile's own Ans (P4)", async () => {
+    const a = server.seed("ana@example.com", PASSWORD, ["Default", "Work"]);
+    a.profiles[1]!.ans = "4.2e+1" as never;
+    const user = await start("/login");
+    await user.type(field("Email"), "ana@example.com");
+    await user.type(field("Password"), PASSWORD);
+    await user.click(screen.getByRole("button", { name: "Log in" }));
+    await screen.findByRole("group", { name: "Keypad" });
+    await user.click(key("7"));
+    await user.click(within(await openSwitcher(user)).getByRole("menuitemradio", { name: "Work" }));
+    await screen.findByRole("button", { name: "Work, switch profile" });
+    expect(result()).toBe("0");
+    expect(ansRow()).toBe("Ans = 42");
+    expect(screen.getByRole("status")).toHaveTextContent("Switched to Work.");
+  });
+});
+
+describe("#4 AC3/AC4: own settings per profile, applied to the active profile only", () => {
+  it("decimal places and theme apply immediately and are saved for the active profile", async () => {
+    server.seed("ana@example.com", PASSWORD, ["Default", "Work"]);
+    const user = await start("/login");
+    await user.type(field("Email"), "ana@example.com");
+    await user.type(field("Password"), PASSWORD);
+    await user.click(screen.getByRole("button", { name: "Log in" }));
+    await screen.findByRole("group", { name: "Keypad" });
+    await user.click(key("2")); await user.click(key("Divided by")); await user.click(key("3")); await user.click(key("Equals"));
+    expect(result()).toBe("0.666666666667");
+
+    await user.click(within(await openSwitcher(user)).getByRole("menuitem", { name: "Profile settings" }));
+    expect(screen.getByRole("heading", { level: 2, name: "Settings for Default" })).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Decimal places"), "2");
+    expect(screen.getByTestId("dp-example")).toHaveTextContent("Example: 2 ÷ 3 = 0.67");
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved"));
+    await user.click(screen.getByRole("radio", { name: "Dark" }));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    await waitFor(() => expect(server.calls.filter((c) => c.path === "/api/profile/settings").map((c) => c.body)).toEqual([{ decimalPlaces: 2 }, { theme: "dark" }]));
+    await axeClean();
+
+    await user.click(screen.getByRole("link", { name: "Back to calculator" }));
+    await screen.findByRole("group", { name: "Keypad" });
+    expect(ansRow()).toBe("Ans = 0.67");
+
+    // the other profile keeps its own settings
+    await user.click(within(await openSwitcher(user)).getByRole("menuitemradio", { name: "Work" }));
+    await screen.findByRole("button", { name: "Work, switch profile" });
+    expect(document.documentElement.dataset.theme).toBe("system");
+    expect(server.accounts[0]!.profiles.map((p) => [p.name, p.settings])).toEqual([
+      ["Default", { decimalPlaces: 2, theme: "dark" }],
+      ["Work", { decimalPlaces: null, theme: "system" }],
+    ]);
+  });
+
+  it("a failed save reverts the control and shows an alert", async () => {
+    const user = await start("/login");
+    await signUp(user);
+    await user.click(within(await openSwitcher(user)).getByRole("menuitem", { name: "Profile settings" }));
+    server.setOffline(true);
+    await user.click(screen.getByRole("radio", { name: "Light" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save your change.");
+    expect(screen.getByRole("radio", { name: /System/ })).toBeChecked();
+  });
+});
+
+describe("Ans sync (P4, ADR 0008)", () => {
+  it("sends the canonical full-precision Ans after '=' and null on AC", async () => {
+    const user = await start("/login");
+    await signUp(user);
+    await user.click(key("1")); await user.click(key("Divided by")); await user.click(key("3")); await user.click(key("Equals"));
+    await waitFor(() => expect(server.calls.filter((c) => c.path === "/api/profile/ans").map((c) => c.body)).toEqual([
+      { ans: "3.333333333333333333333333333333333e-1" },
+    ]));
+    await user.click(key("C, clear"));
+    await user.click(key("AC, all clear"));
+    await waitFor(() => expect(server.calls.filter((c) => c.path === "/api/profile/ans").at(-1)!.body).toEqual({ ans: null }));
   });
 });

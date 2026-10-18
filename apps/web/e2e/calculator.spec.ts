@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { signUpViaApi } from "./helpers";
 
 const keypad = (page: Page) => page.getByRole("group", { name: "Keypad" });
 const key = (page: Page, name: string) => keypad(page).getByRole("button", { name, exact: true });
@@ -7,6 +8,7 @@ const expression = (page: Page) => page.getByTestId("expression");
 const result = (page: Page) => page.getByTestId("result");
 
 test.beforeEach(async ({ page }) => {
+  await signUpViaApi(page); // from R2 an account is always required (#3)
   await page.goto("/");
   await expect(page).toHaveTitle("Calculator");
 });

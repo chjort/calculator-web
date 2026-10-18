@@ -1,6 +1,6 @@
 type Brand<T, B extends string> = T & { readonly __brand: B };
 
-/** Canonical decimal string, e.g. "-12.5". Never exponent form, never "-0". */
+/** Canonical decimal string (ADR 0008): decimal.js toExponential(), e.g. "-1.25e+1", "1.5e-400". Never "-0". */
 export type DecimalString = Brand<string, "DecimalString">;
 
 export type CalcErrorCode =
