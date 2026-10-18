@@ -3,8 +3,8 @@ import { eq } from "drizzle-orm";
 import type { Executor } from "./db/client";
 import { account, profile } from "./db/schema";
 import { sessionInfo } from "./auth/session-rules";
-import type { SessionRow } from "./auth/sessions";
-import type { AccountId } from "./domain/types";
+import { lastUsedProfile, type SessionRow } from "./auth/sessions";
+import type { AccountId, ProfileId } from "./domain/types";
 
 export type ProfileRow = typeof profile.$inferSelect;
 
@@ -27,5 +27,7 @@ export async function loadMe(ex: Executor, accountId: AccountId, s: SessionRow):
     activeProfileId: s.profileId,
     profiles: profiles.map(toProfileDto),
     session: sessionInfo(s),
+    // Same function profiles.remove uses, so the dialog and the actual switch share one rule.
+    switchOnDeleteProfileId: profiles.length > 1 ? await lastUsedProfile(ex, accountId, s.profileId as ProfileId) : null,
   };
 }

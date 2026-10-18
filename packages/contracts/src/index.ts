@@ -47,6 +47,8 @@ export const MeResponse = z.object({
   activeProfileId: z.uuid(),
   profiles: z.array(ProfileDto), // oldest first
   session: SessionInfo,
+  // Additive (PR #26): the profile DELETE of the active profile would switch to (ADR 0007 rule); null if it's the only one.
+  switchOnDeleteProfileId: z.uuid().nullable(),
 });
 export type MeResponse = z.infer<typeof MeResponse>;
 export const ErrorCode = z.enum([

@@ -105,14 +105,24 @@ describe("#4 AC1: create, rename and delete profiles", () => {
     clock.advance(2 * MIN);
     await c.call("POST", `/api/profiles/${homework.activeProfileId}/activate`);
     const before = c.cookie;
+    const announced = await c.me();
+    expect(announced.switchOnDeleteProfileId).toBe(work.id); // what the dialog names…
     const res = await c.call("DELETE", `/api/profiles/${homework.activeProfileId}`);
     expect(res.statusCode).toBe(200);
     const m = me(res);
     expect(active(m).name).toBe("Work"); // Work was used after Default
+    expect(m.activeProfileId).toBe(announced.switchOnDeleteProfileId); // …is where the server switched
     expect(names(m)).toEqual(["Default", "Work"]);
     expect(m.session.expiresAt).toBe(first.session.expiresAt);
     expect(c.cookie).not.toBe(before);
     expect(active(await c.me()).name).toBe("Work");
+  });
+
+  it("switchOnDeleteProfileId is null with one profile and never the active profile", async () => {
+    const { c, first } = await signedUp();
+    expect((await c.me()).switchOnDeleteProfileId).toBeNull();
+    const m = me(await c.call("POST", "/api/profiles", { name: "Work" }));
+    expect(m.switchOnDeleteProfileId).toBe(first.activeProfileId);
   });
 
   it("the last profile can't be deleted", async () => {
@@ -203,6 +213,7 @@ describe("Ans per profile (P4, ADR 0008)", () => {
     const work = me(await c.call("POST", "/api/profiles", { name: "Work" }));
     expect(active(work).ans).toBeNull();
     await c.call("PATCH", "/api/profile/ans", { ans: "-3.333333333333333333333333333333333e+0" });
+    clock.advance(MIN);
     const back = me(await c.call("POST", `/api/profiles/${first.activeProfileId}/activate`));
     expect(active(back).ans).toBe("1.5e-400");
     await c.call("POST", "/api/auth/logout");

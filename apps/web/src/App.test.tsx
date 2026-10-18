@@ -249,6 +249,7 @@ describe("#4 AC1: create, rename and delete profiles", () => {
     const confirm = screen.getByRole("alertdialog", { name: 'Delete "Default"?' });
     expect(within(confirm).getByRole("button", { name: "Cancel" })).toHaveFocus();
     expect(confirm).toHaveAccessibleDescription(/permanently deletes the profile "Default"/);
+    expect(confirm).toHaveAccessibleDescription(/You're using this profile\. After deleting it you'll switch to "Homework"\./);
     await axeClean();
     await user.click(within(confirm).getByRole("button", { name: "Delete profile" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());

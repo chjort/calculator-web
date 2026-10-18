@@ -86,6 +86,8 @@ export function ProfileNameDialog(props: {
 export function DeleteProfileDialog(props: {
   profile: ProfileDto;
   activeId: string;
+  /** Name of MeResponse.switchOnDeleteProfileId: where the server will switch if this (active) profile is deleted. */
+  nextName: string | null;
   onConfirm: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -102,7 +104,7 @@ export function DeleteProfileDialog(props: {
       description={
         <>
           <p>This permanently deletes the profile "{n}" and its settings. This can't be undone.</p>
-          {isActive && <p>You're using this profile. After deleting it you'll switch to your most recently used other profile.</p>}
+          {isActive && props.nextName && <p>You're using this profile. After deleting it you'll switch to "{props.nextName}".</p>}
         </>
       }
     >

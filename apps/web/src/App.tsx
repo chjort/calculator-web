@@ -200,6 +200,7 @@ export function App() {
       <DeleteProfileDialog
         profile={authedMe.profiles.find((p) => p.id === id)!}
         activeId={authedMe.activeProfileId}
+        nextName={authedMe.switchOnDeleteProfileId ? profileName(authedMe.switchOnDeleteProfileId) : null}
         onClose={() => setDialog(null)}
         onConfirm={async () => {
           const name = profileName(id);
@@ -227,7 +228,11 @@ export function App() {
             onNewProfile={() => setDialog({ kind: "create" })}
             onSwitch={switchTo}
             onRename={(id) => setDialog({ kind: "rename", id })}
-            onDelete={(id) => setDialog({ kind: "delete", id })}
+            onDelete={async (id) => {
+              // Re-read so the named fallback reflects the server's current last-used order.
+              if (id === authedMe.activeProfileId) await api.me().then((m) => withMe(() => m), () => {});
+              setDialog({ kind: "delete", id });
+            }}
           />
         ) : (
           <div className="calc-page">

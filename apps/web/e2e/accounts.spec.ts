@@ -122,10 +122,12 @@ test("#4: settings per profile, rename and delete (incl. the active one)", async
   await page.getByRole("button", { name: "Delete Taxes" }).click();
   const confirm = page.getByRole("alertdialog", { name: 'Delete "Taxes"?' });
   await expect(confirm.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await expect(confirm).toContainText(`You're using this profile. After deleting it you'll switch to "Homework".`);
   await axeClean(page);
   await confirm.getByRole("button", { name: "Delete profile" }).click();
   await expect(page.getByRole("heading", { name: "Settings for Homework" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Your profiles (1 of 10)" })).toBeVisible();
+  await expect(switcher(page)).toHaveAccessibleName("Homework, switch profile"); // actually switched to the named profile
 });
 
 test("#3: duplicate sign-up and wrong password show clear, generic errors", async ({ page }) => {

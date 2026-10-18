@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, ne } from "drizzle-orm";
 import type { Executor } from "../db/client";
 import { profile, session } from "../db/schema";
 import type { AccountId, ProfileId, SessionId, SessionToken } from "../domain/types";
@@ -32,13 +32,12 @@ export async function getSession(ex: Executor, id: SessionId): Promise<SessionRo
 
 /** Last-used rule (ADR 0003/0007): profile of the account's session with max(last_seen_at), else the oldest profile. */
 export async function lastUsedProfile(ex: Executor, accountId: AccountId, excluding?: ProfileId): Promise<ProfileId> {
-  const sessions = await ex
+  const [hit] = await ex
     .select({ profileId: session.profileId })
     .from(session)
-    .where(eq(session.accountId, accountId))
-    .orderBy(desc(session.lastSeenAt))
-    .limit(excluding ? 50 : 1);
-  const hit = sessions.find((s) => s.profileId !== excluding);
+    .where(excluding ? and(eq(session.accountId, accountId), ne(session.profileId, excluding)) : eq(session.accountId, accountId))
+    .orderBy(desc(session.lastSeenAt), desc(session.startedAt))
+    .limit(1);
   if (hit) return hit.profileId as ProfileId;
   const profiles = await ex.select({ id: profile.id }).from(profile).where(eq(profile.accountId, accountId)).orderBy(profile.createdAt, profile.id);
   const oldest = profiles.find((p) => p.id !== excluding);

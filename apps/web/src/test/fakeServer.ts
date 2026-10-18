@@ -15,7 +15,8 @@ export function fakeServer() {
   const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`;
   const session = { expiresAt: "2099-01-01T12:00:00.000Z", idleExpiresAt: "2099-01-01T00:30:00.000Z" };
   const profile = (name: string): ProfileDto => ({ id: uuid(), name, settings: { decimalPlaces: null, theme: "system" }, ans: null, createdAt: new Date(2026, 0, 1, 0, 0, n).toISOString() });
-  const me = (a: Account): MeResponse => ({ account: { id: a.id, email: a.email }, activeProfileId: a.active, profiles: a.profiles, session });
+  const me = (a: Account): MeResponse => ({ account: { id: a.id, email: a.email }, activeProfileId: a.active, profiles: a.profiles, session,
+    switchOnDeleteProfileId: a.profiles.length > 1 ? a.profiles.find((p) => p.id !== a.active)!.id : null });
   const json = (status: number, body?: unknown) => new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   const err = (status: number, code: string, fields?: Record<string, string>) => json(status, { error: { code, message: code, ...(fields ? { fields } : {}) } });
 
