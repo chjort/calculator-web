@@ -2,7 +2,7 @@
 
 Status: **Accepted by PO (2026-10-18)** · Owner: Architect · Scope: whole roadmap (R1–R4), R1 (#1, #2) first.
 UX specs (Designer, on the shared computer and not yet in the repo): `product/design/R1-1-basic-arithmetic.md` (#1) · `product/design/R1-2-clear-backspace-ans.md` (#2). They own behaviour and copy (decisions D1–D12, approved by PO); this doc only gives them a shape.
-Decisions: [ADR 0001 stack](adr/0001-stack-and-repo-layout.md) · [0002 evaluation](adr/0002-expression-evaluation.md) · [0003 auth/sessions](adr/0003-auth-and-profile-sessions.md) · [0004 history/retention](adr/0004-history-storage-and-retention.md) · [0005 credentials/throttling](adr/0005-credential-policy-and-login-throttling.md) · [0006 profile limits/deletion](adr/0006-profile-limits-and-deletion.md) · [0007 delete active profile](adr/0007-delete-active-profile.md)
+Decisions: [ADR 0001 stack](adr/0001-stack-and-repo-layout.md) · [0002 evaluation](adr/0002-expression-evaluation.md) · [0003 auth/sessions](adr/0003-auth-and-profile-sessions.md) · [0004 history/retention](adr/0004-history-storage-and-retention.md) · [0005 credentials/throttling](adr/0005-credential-policy-and-login-throttling.md) · [0006 profile limits/deletion](adr/0006-profile-limits-and-deletion.md) · [0007 delete active profile](adr/0007-delete-active-profile.md) · [0008 Ans representation/range](adr/0008-ans-representation-and-numeric-range.md)
 Release detail: [R2 accounts & profiles](architecture/R2.md) (flows, migrations, API contract)
 
 Legend: **[R1]** build now · **[R2]** accounts/profiles · **[R3]** sessions/history · **[R4]** polish
@@ -140,7 +140,7 @@ Timeout ⇒ 401 ⇒ user logs in again (accounts required, no guest).
 ```ts
 // ---- shared brands ----
 type Brand<T, B extends string> = T & { readonly __brand: B };
-export type DecimalString = Brand<string, "DecimalString">;   // canonical decimal, e.g. "-12.5"
+export type DecimalString = Brand<string, "DecimalString">;   // canonical: toExponential(), no trailing zeros, 34 sig. digits, e.g. "-1.25e+1", "1.5e-400"; ≤ 48 chars (ADR 0008)
 export type AccountId = Brand<string, "AccountId">;
 export type ProfileId = Brand<string, "ProfileId">;
 export type SessionId = Brand<string, "SessionId">;
@@ -243,7 +243,7 @@ R2 zod schemas, status codes and error shape: [architecture/R2.md §4](architect
 2. `packages/engine`: grammar below, golden tests (precision, `÷0`, parens, `%`).
 3. `apps/web`: token `reduce()` + `toExpression()` + KEYS table + keypad + keyboard handler; spec scenario tables (R1-1 §4–5, R1-2) become reducer unit tests; e2e in 4 browsers.
 
-R1 grammar (precedence low→high): `expr := term (("+"|"-") term)*` · `term := unary (("*"|"/"|"×"|"÷") unary)*` · `unary := ("-"|"+") unary | postfix` · `postfix := primary "%"?` (`x% = x ÷ 100`, so `200 + 10% = 200.1`; D1, PO-confirmed) · `primary := number | "Ans" | "(" expr ")"`. `−` and `×`/`÷` glyphs normalized in the tokenizer. Implicit × and auto-closed `)` are produced by the editor as real tokens, so the grammar stays free of them. Nothing in R1 blocks R2–R4: functions (R4) add one `primary` alternative.
+R1 grammar (precedence low→high): `expr := term (("+"|"-") term)*` · `term := unary (("*"|"/"|"×"|"÷") unary)*` · `unary := ("-"|"+") unary | postfix` · `postfix := primary "%"?` (`x% = x ÷ 100`, so `200 + 10% = 200.1`; D1, PO-confirmed) · `primary := number | "Ans" | "(" expr ")"` · `number := digits ("." digits)? ([eE] [+-]? digits)?` (exponent per ADR 0008; the keypad never produces `e`, but the D12 save form does). Range: `Decimal.set({precision:34, minE:-9999, maxE:9999})`. Beyond it the result is `overflow`, and below 1e-9999 it is 0. `−` and `×`/`÷` glyphs normalized in the tokenizer. Implicit × and auto-closed `)` are produced by the editor as real tokens, so the grammar stays free of them. Nothing in R1 blocks R2–R4: functions (R4) add one `primary` alternative.
 
 ## 9. Decisions recorded (PO, 2026-10-18)
 1. `%` = postfix ÷ 100 (`200 + 10% = 200.1`).
