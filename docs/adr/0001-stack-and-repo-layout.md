@@ -1,6 +1,6 @@
 # ADR 0001: Stack and repo layout
 
-Status: Proposed · Date: 2026-10-18 · Scope: R1–R4
+Status: Accepted · Date: 2026-10-18 · Scope: R1–R4
 
 ## Context
 R1 needs a browser calculator only. R2–R4 add accounts, profiles, sessions, 1-month history and CSV. The evaluator has to run in the browser (instant feedback) and on the server (authoritative stored result). Small team, built mostly by agents, so we want one language and few moving parts.

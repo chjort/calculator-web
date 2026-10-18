@@ -1,6 +1,6 @@
 # ADR 0004: History storage, retention and CSV export
 
-Status: Proposed · Date: 2026-10-18 · Scope: R3 (#6–#8), R4 (#10)
+Status: Accepted · Date: 2026-10-18 · Scope: R3 (#6–#8), R4 (#10)
 
 ## Context
 Every calculation is saved, both success and error, with the expression, result or error, status, timestamp and session id. History is searchable, deletable and reusable. Entries and sessions older than 1 month are deleted automatically. The CSV export must respect the current filter.
@@ -12,7 +12,7 @@ Every calculation is saved, both success and error, with the expression, result 
 4. An external scheduler (pg_cron or a platform cron) running the sweep.
 
 ## Decision
-Option 2. `result` is stored as decimal text. `error_code`/`error_message` are non-null exactly when `status='error'` (DB CHECK, mirrored by the TS union). There is one `RETENTION = interval '1 month'` constant. Reads filter on it. A daily, advisory-locked, idempotent sweep inside the server (also run on boot) deletes old calculations, then old sessions, and closes stale open sessions. CSV streams from the same query function as the list endpoint, with RFC 4180 quoting and a CSV-injection guard on free-text columns.
+Option 2. `result` is stored as decimal text. `error_code`/`error_message` are non-null exactly when `status='error'` (DB CHECK, mirrored by the TS union). There is one `RETENTION = interval '1 month'` constant. Reads filter on it. A daily, advisory-locked, idempotent sweep inside the server (also run on boot) deletes old calculations, then old sessions, and closes stale open sessions. CSV streams from the same query function as the list endpoint, with RFC 4180 quoting and the standard CSV-injection guard (`= + - @ \t \r`, `-` included; PO decision) on free-text columns. Entries cover successes, errors and incomplete attempts (`incomplete_expression`, D3). Expressions are stored with Ans substituted (D12), so there is no `ans` column.
 
 ## Consequences
 - + Retention stays correct even when the job is late, because reads filter too. The job is safe with N replicas.

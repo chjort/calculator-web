@@ -1,6 +1,6 @@
 # ADR 0003: Accounts, sessions and profile scoping
 
-Status: Proposed · Date: 2026-10-18 · Scope: R2 (#3, #4), R3 (#5)
+Status: Accepted · Date: 2026-10-18 · Scope: R2 (#3, #4), R3 (#5)
 
 ## Context
 Accounts are required. Each account has several private profiles. "Sessions" (#5) start on login, are tracked per profile, end on logout or after 30 min of inactivity, and switching profile starts a new one. Calculations are grouped by session. No profile can see another profile's data.
@@ -11,10 +11,10 @@ Accounts are required. Each account has several private profiles. "Sessions" (#5
 3. **One server-side `session` row per (login × active profile), used for both auth and grouping.**
 
 ## Decision
-Option 3. Each `session` row has `account_id`, `profile_id`, `started_at`, `last_seen_at`, `ended_at` and `end_reason`. The cookie `__Host-sid` holds an opaque 256-bit token, and only its SHA-256 is stored. Idle for more than 30 min means the session ends (`timeout`) and the user gets a 401 and logs in again. `last_seen_at` is written at most once a minute. Switching profile ends the session (`profile_switch`), opens a new one and rotates the cookie. Passwords use argon2id. Middleware turns the cookie into a module-private `ProfileScope`, and every repository call needs one. History endpoints never take a profile id.
+Option 3. Each `session` row has `account_id`, `profile_id`, `started_at`, `last_seen_at`, `ended_at` and `end_reason`. The cookie `__Host-sid` holds an opaque 256-bit token, and only its SHA-256 is stored. Idle for more than 30 min means the session ends (`timeout`) and the user gets a 401 and must log in again (PO-confirmed). Login opens the last-used profile, which is the profile of the account's most recent session, falling back to the oldest profile. `last_seen_at` is written at most once a minute. Switching profile ends the session (`profile_switch`), opens a new one and rotates the cookie. Passwords use argon2id. Middleware turns the cookie into a module-private `ProfileScope`, and every repository call needs one. History endpoints never take a profile id.
 
 ## Consequences
 - + One owner for "who is active where". #5 comes for free once R2 is in.
 - + Logout and revocation are immediate, which JWT (option 1) can't do without a denylist.
 - + IDOR on history is structurally impossible, and a composite FK `(session_id, profile_id)` stops a calculation from landing in another profile.
-- − A DB read on every request, which is fine at this scale. Idle timeout forces a re-login (open question for PO).
+- − A DB read on every request, which is fine at this scale. Idle timeout forces a re-login, which is accepted by the PO.

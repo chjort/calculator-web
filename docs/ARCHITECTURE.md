@@ -1,7 +1,7 @@
 # Calculator Web – Architecture
 
-Status: **Proposed (In Review)** · Owner: Architect · Scope: whole roadmap (R1–R4), R1 (#1, #2) first.
-UX specs (Designer, on the shared computer and not yet in the repo): `product/design/R1-1-basic-arithmetic.md` (#1) · `product/design/R1-2-clear-backspace-ans.md` (#2). They own behaviour and copy; this doc only gives them a shape.
+Status: **Accepted by PO (2026-10-18)** · Owner: Architect · Scope: whole roadmap (R1–R4), R1 (#1, #2) first.
+UX specs (Designer, on the shared computer and not yet in the repo): `product/design/R1-1-basic-arithmetic.md` (#1) · `product/design/R1-2-clear-backspace-ans.md` (#2). They own behaviour and copy (decisions D1–D12, approved by PO); this doc only gives them a shape.
 Decisions: [ADR 0001 stack](adr/0001-stack-and-repo-layout.md) · [0002 evaluation](adr/0002-expression-evaluation.md) · [0003 auth/sessions](adr/0003-auth-and-profile-sessions.md) · [0004 history/retention](adr/0004-history-storage-and-retention.md)
 
 Legend: **[R1]** build now · **[R2]** accounts/profiles · **[R3]** sessions/history · **[R4]** polish
@@ -92,8 +92,7 @@ erDiagram
     uuid id PK
     uuid profile_id FK
     uuid session_id FK
-    text expression "canonical text, may contain Ans, max 500 chars"
-    text ans "decimal string Ans resolved to; null if unused"
+    text expression "as typed, Ans substituted (D12), max 500 chars"
     text status "success|error"
     text result "decimal string; null iff error"
     text error_code "null iff success"
@@ -128,7 +127,7 @@ Timeout ⇒ 401 ⇒ user logs in again (accounts required, no guest).
 - **Sweep** daily + on boot, guarded by `pg_try_advisory_lock` (idempotent, safe with N replicas): delete calculations older than RETENTION, then sessions whose `coalesce(ended_at, last_seen_at)` is older than RETENTION; close stale open sessions. Logs counts.
 
 ### CSV export (#10) [R4]
-`GET /api/calculations.csv?q=…` reuses the **same** list query as the history UI (so filter semantics are identical), streams rows, RFC 4180 quoting, columns `expression,result,status,error_message,created_at,session_id`, and, in the free-text columns only (`expression`, `error_message`; `result` is a typed `DecimalString` and stays untouched), prefixes cells starting with `= + - @ \t \r` with `'` (CSV-injection guard; see open question 5).
+`GET /api/calculations.csv?q=…` reuses the **same** list query as the history UI (so filter semantics are identical), streams rows, RFC 4180 quoting, columns `expression,result,status,error_message,created_at,session_id`, and, in the free-text columns only (`expression`, `error_message`; `result` is a typed `DecimalString` and stays untouched), prefixes cells starting with `= + - @ \t \r` with `'` (standard CSV-injection guard, `-` included: `-5+3` exports as `'-5+3`; PO decision).
 
 ## 5. Core types
 
@@ -144,7 +143,8 @@ export type Email = Brand<string, "Email">;                   // lower-cased, va
 
 // ---- packages/engine [R1] — the only public surface ----
 export type CalcErrorCode =
-  | "syntax"          // unbalanced parens, dangling operator, bad number
+  | "syntax"          // unbalanced parens, bad number
+  | "incomplete_expression" // input ends where an operand is expected, e.g. "3 +" → "Finish the expression" (D3)
   | "divide_by_zero"  // #1
   | "overflow"        // |x| beyond range
   | "domain"          // R4: log(-1), sqrt(-1)
@@ -155,7 +155,7 @@ export type Evaluation =
   | { status: "error"; error: CalcError };
 
 export function evaluate(expression: string, ctx: { ans: DecimalString | null }): Evaluation; // total: never throws; `Ans` resolves to ctx.ans
-export function format(v: DecimalString, o?: { decimalPlaces?: number }): string; // ≤12 sig. digits; scientific at ≥1e12 or <1e-6 (spec Q2)
+export function format(v: DecimalString, o?: { decimalPlaces?: number }): string; // ≤12 sig. digits; scientific at ≥1e12 or <1e-6 (D2)
 
 // ---- apps/web editor [R1]: token-based, one pure reducer; buttons & keyboard dispatch the same actions ----
 // Behaviour is the Designer spec (R1-1 §1.3/§5, R1-2 §1); this is only its shape.
@@ -172,14 +172,15 @@ export type EditorState =
   | { mode: "typing" | "hint"; tokens: readonly Token[] }     // hint = "Finish the expression"
   | { mode: "result"; tokens: readonly Token[]; value: DecimalString }
   | { mode: "error"; tokens: readonly Token[]; error: CalcError };
-export type Editor = { state: EditorState; ans: DecimalString | null }; // Ans never holds an error
+export type Editor = { state: EditorState; ans: DecimalString | null }; // Ans never holds an error; page memory in R1, per active profile from R2 (D11)
 export type EditorAction =
   | { type: "input"; token: Token }  // guarded: invalid keys are no-ops; implicit × inserted as a real token
   | { type: "backspace" }            // pops the last token (whole Ans); in result/error: undo the "="
   | { type: "clear" }                // C: empty display; AC (already empty): also ans = null
-  | { type: "evaluate" };            // "=" / Enter: incomplete → hint; auto-close ")" then evaluate()
+  | { type: "evaluate" };            // "=" / Enter: auto-close ")", evaluate(); incomplete_expression → hint mode; repeated "=" is a no-op (D4)
 export function reduce(e: Editor, a: EditorAction): Editor;
-export function toExpression(tokens: readonly Token[]): string; // the ONE serializer, e.g. "Ans × −2"
+export function toExpression(tokens: readonly Token[], o?: { substituteAns: DecimalString }): string;
+// the ONE serializer: display/eval form "Ans × −2"; save form (R3, D12) substitutes the value: "15 × −2" (negative values wrapped in parentheses)
 // KEYS: one table {id,label,token|action,keyboard[]} renders the keypad AND builds the keydown map.
 
 // ---- domain [R2+] ----
@@ -192,7 +193,7 @@ export type Session = {
 };
 export type Calculation = {
   id: CalculationId; profileId: ProfileId; sessionId: SessionId;
-  expression: string; ans: DecimalString | null; createdAt: Date;
+  expression: string; createdAt: Date; // expression has Ans substituted (D12)
 } & (
   | { status: "success"; result: DecimalString }
   | { status: "error"; error: CalcError }
@@ -214,7 +215,7 @@ DB rows → domain via one `parseCalculationRow()` per table (reject rows that v
 | R2 | `GET /me` | account, profiles, active profile |
 | R2 | `POST /profiles` · `PATCH /profiles/:id` · `DELETE /profiles/:id` | scoped by AccountScope; 404 if not yours |
 | R2 | `POST /profiles/:id/activate` | ends session (`profile_switch`), opens new one, rotates cookie |
-| R3 | `POST /calculations` `{expression, ans}` → `Calculation` | server re-evaluates with `engine` (`Ans` := `ans`); client result never trusted; `ans` stored so the entry stays reproducible |
+| R3 | `POST /calculations` `{expression}` → `Calculation` | expression with Ans already substituted (D12; payload containing `Ans` → 400); server re-evaluates with `engine`, client result never trusted; sent on every `=` that is a calculation attempt, incl. incomplete ones (D3), never for no-ops/input feedback |
 | R3 | `GET /calculations?q=&before=&limit=` | newest first, keyset pagination, active profile only |
 | R3 | `DELETE /calculations/:id` · `DELETE /calculations` | single / clear all (active profile) |
 | R4 | `GET /calculations.csv?q=` | same query as list; streamed |
@@ -226,19 +227,21 @@ DB rows → domain via one `parseCalculationRow()` per table (reject rows that v
 - **Accuracy**: decimal arithmetic at 34 digits, displayed rounded to 12 significant digits (or profile `decimalPlaces`). Golden test table in `engine`.
 - **Performance**: evaluate < 1 ms client-side; API p95 < 200 ms; history queries hit `(profile_id, created_at)` index; 1-month retention bounds table size.
 - **Observability**: pino JSON logs with request id; never log passwords, tokens or expressions; `/healthz` (process) and `/readyz` (DB); retention job logs deleted counts; error counts per route.
-- **Accessibility**: keypad = real `<button>`s from the KEYS table; result in `aria-live` region (cheap in R1, required in R4).
+- **Accessibility**: keypad = real `<button>`s from the KEYS table; result in one polite `role="status"` region. Bar: WCAG 2.2 AA (D7).
 
 ## 8. R1 build order (#1, #2)
 1. Scaffold: pnpm workspace, strict TS, ESLint, Vitest, Playwright, CI.
 2. `packages/engine`: grammar below, golden tests (precision, `÷0`, parens, `%`).
 3. `apps/web`: token `reduce()` + `toExpression()` + KEYS table + keypad + keyboard handler; spec scenario tables (R1-1 §4–5, R1-2) become reducer unit tests; e2e in 4 browsers.
 
-R1 grammar (precedence low→high): `expr := term (("+"|"-") term)*` · `term := unary (("*"|"/"|"×"|"÷") unary)*` · `unary := ("-"|"+") unary | postfix` · `postfix := primary "%"?` (`x% = x ÷ 100`, so `200 + 10% = 200.1`; matches spec Q1, pending PO) · `primary := number | "Ans" | "(" expr ")"`. `−` and `×`/`÷` glyphs normalized in the tokenizer. Implicit × and auto-closed `)` are produced by the editor as real tokens, so the grammar stays free of them. Nothing in R1 blocks R2–R4: functions (R4) add one `primary` alternative.
+R1 grammar (precedence low→high): `expr := term (("+"|"-") term)*` · `term := unary (("*"|"/"|"×"|"÷") unary)*` · `unary := ("-"|"+") unary | postfix` · `postfix := primary "%"?` (`x% = x ÷ 100`, so `200 + 10% = 200.1`; D1, PO-confirmed) · `primary := number | "Ans" | "(" expr ")"`. `−` and `×`/`÷` glyphs normalized in the tokenizer. Implicit × and auto-closed `)` are produced by the editor as real tokens, so the grammar stays free of them. Nothing in R1 blocks R2–R4: functions (R4) add one `primary` alternative.
 
-## 9. Open questions (for PO)
-1. **`%` semantics**: `x% = x ÷ 100` (`200 + 10% = 200.1`). This matches the Designer spec (R1-1 Q1) but still needs PO confirmation. Alternatives are calculator-style `200 + 10% = 220` or modulo. It's one grammar rule, so it's cheap to change, but it must be decided before #1 is built.
-2. **Active profile at login**: assumed to be the last used profile. OK?
-3. **Idle timeout = forced re-login**: assumed, since sessions are both auth and grouping. OK?
-4. **CSV-injection guard** prefixes `'` to expression cells starting with `-`, so `-5+3` exports as `'-5+3`. Accept that, or only guard `= + @`?
-5. **CSV and `Ans`**: entries such as `Ans × 2` are stored with the `ans` value they used. Should CSV add an `ans` column (proposed), or substitute the value into the expression?
-6. The Designer spec's own PO questions (R1-1 Q2–Q7: display digits, incomplete `=`, repeated `=`, Enter, locale, WCAG 2.2) are UX decisions. The architecture works with the recommended defaults.
+## 9. Decisions recorded (PO, 2026-10-18)
+1. `%` = postfix ÷ 100 (`200 + 10% = 200.1`).
+2. Login opens the last-used profile, i.e. the profile of the account's most recent session. If there is none (new account, or older than retention), the oldest profile is used.
+3. 30 min idle ends the session; a fresh login is required.
+4. CSV keeps the standard formula guard, including `-`.
+5. No `ans` column. Saved expressions have Ans substituted with its value (Designer D12).
+6. Designer D2–D12 are accepted. D3 as changed by the PO: `=` on an incomplete expression shows the hint and, **from R3**, is saved as an error entry (`incomplete_expression`, message "Finish the expression", expression as typed).
+
+No open questions.
