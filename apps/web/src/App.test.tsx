@@ -20,7 +20,7 @@ function setup() {
 describe("mouse input (#1 AC4, #2 AC4)", () => {
   it("computes with the on-screen keypad", async () => {
     const t = setup();
-    await t.click("1", "2", "Times", "(, open parenthesis", "3", "Minus", "1", "), close parenthesis", "=, equals");
+    await t.click("1", "2", "Times", "Open parenthesis", "3", "Minus", "1", "Close parenthesis", "Equals");
     expect(t.expression()).toBe("12 × (3 − 1) =");
     expect(t.result()).toBe("24");
     expect(t.ansRow()).toBe("Ans = 24");
@@ -29,9 +29,9 @@ describe("mouse input (#1 AC4, #2 AC4)", () => {
 
   it("percent, divide by zero error, backspace, clear, Ans", async () => {
     const t = setup();
-    await t.click("2", "0", "0", "+, plus", "1", "0", "Percent", "=, equals");
+    await t.click("2", "0", "0", "Plus", "1", "0", "Percent", "Equals");
     expect(t.result()).toBe("200.1");
-    await t.click("8", "Divided by", "0", "=, equals");
+    await t.click("8", "Divided by", "0", "Equals");
     expect(t.result()).toBe("⚠ Error: Can't divide by zero");
     expect(t.announced()).toBe("Error: Can't divide by zero");
     await t.click("Backspace");
@@ -39,7 +39,7 @@ describe("mouse input (#1 AC4, #2 AC4)", () => {
     await t.click("C, clear");
     expect(t.result()).toBe("0");
     expect(t.ansRow()).toBe("Ans = 200.1");
-    await t.click("Ans, previous answer", "Times", "1", "0", "=, equals");
+    await t.click("Ans, previous answer", "Times", "1", "0", "Equals");
     expect(t.result()).toBe("2001");
     await t.click("C, clear", "AC, all clear");
     expect(t.ansRow()).toBe("");
@@ -55,7 +55,7 @@ describe("mouse input (#1 AC4, #2 AC4)", () => {
     expect(t.result()).toBe("ⓘ No previous result yet");
     await t.click("5");
     expect(t.key("C, clear")).toHaveTextContent("C");
-    await t.click("=, equals");
+    await t.click("Equals");
     expect(t.key("Ans, previous answer")).not.toHaveAttribute("aria-disabled");
   });
 });
@@ -113,7 +113,7 @@ describe("keyboard input (#1 AC4, #2 AC4)", () => {
     await t.user.tab();
     expect(t.key("AC, all clear")).toHaveFocus();
     await t.user.tab();
-    expect(t.key("(, open parenthesis")).toHaveFocus();
+    expect(t.key("Open parenthesis")).toHaveFocus();
     for (let i = 0; i < 21; i++) await t.user.tab();
     expect(screen.getByText("Keyboard shortcuts")).toHaveFocus();
   });
@@ -158,16 +158,20 @@ describe("accessibility (WCAG 2.2 AA, axe)", () => {
   });
 });
 
-describe("WCAG 2.5.3 label in name", () => {
-  it("every text-labelled key's name starts with its visible text; symbol keys keep descriptive names", async () => {
+describe("WCAG 2.5.3 label in name (D13)", () => {
+  it("letter keys: name starts with the visible label; digits: name = digit; symbol keys: descriptive name", async () => {
     const t = setup();
-    const symbols: Record<string, string> = { "×": "Times", "÷": "Divided by", "−": "Minus", "⌫": "Backspace", "%": "Percent" };
+    const symbols: Record<string, string> = {
+      "+": "Plus", "−": "Minus", "×": "Times", "÷": "Divided by", "%": "Percent",
+      "(": "Open parenthesis", ")": "Close parenthesis", ".": "Decimal point", "=": "Equals", "⌫": "Backspace",
+    };
     const check = () => {
       for (const b of within(screen.getByRole("group", { name: "Keypad" })).getAllByRole("button")) {
         const text = b.textContent!.replace("Backspace", "");
         const name = b.getAttribute("aria-label")!;
-        if (symbols[text]) expect(name).toBe(symbols[text]);
-        else expect(name.startsWith(text), `${text} -> ${name}`).toBe(true);
+        if (/^[A-Za-z]+$/.test(text)) expect(name.startsWith(text), `${text} -> ${name}`).toBe(true);
+        else if (/^\d$/.test(text)) expect(name).toBe(text);
+        else expect(name, text).toBe(symbols[text]);
       }
     };
     check();

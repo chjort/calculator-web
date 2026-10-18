@@ -12,12 +12,12 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("#1: mouse/touch arithmetic, %, parentheses, divide by zero", async ({ page }) => {
-  for (const k of ["1", "2", "Times", "(, open parenthesis", "3", "Minus", "1", "), close parenthesis", "=, equals"]) await key(page, k).click();
+  for (const k of ["1", "2", "Times", "Open parenthesis", "3", "Minus", "1", "Close parenthesis", "Equals"]) await key(page, k).click();
   await expect(expression(page)).toHaveText("12 × (3 − 1) =");
   await expect(result(page)).toHaveText("24");
-  for (const k of ["2", "0", "0", "+, plus", "1", "0", "Percent", "=, equals"]) await key(page, k).click();
+  for (const k of ["2", "0", "0", "Plus", "1", "0", "Percent", "Equals"]) await key(page, k).click();
   await expect(result(page)).toHaveText("200.1");
-  for (const k of ["8", "Divided by", "0", "=, equals"]) await key(page, k).click();
+  for (const k of ["8", "Divided by", "0", "Equals"]) await key(page, k).click();
   await expect(result(page)).toHaveText("⚠ Error: Can't divide by zero");
 });
 
