@@ -2,7 +2,8 @@
 
 Status: **Accepted by PO (2026-10-18)** · Owner: Architect · Scope: whole roadmap (R1–R4), R1 (#1, #2) first.
 UX specs (Designer, on the shared computer and not yet in the repo): `product/design/R1-1-basic-arithmetic.md` (#1) · `product/design/R1-2-clear-backspace-ans.md` (#2). They own behaviour and copy (decisions D1–D12, approved by PO); this doc only gives them a shape.
-Decisions: [ADR 0001 stack](adr/0001-stack-and-repo-layout.md) · [0002 evaluation](adr/0002-expression-evaluation.md) · [0003 auth/sessions](adr/0003-auth-and-profile-sessions.md) · [0004 history/retention](adr/0004-history-storage-and-retention.md)
+Decisions: [ADR 0001 stack](adr/0001-stack-and-repo-layout.md) · [0002 evaluation](adr/0002-expression-evaluation.md) · [0003 auth/sessions](adr/0003-auth-and-profile-sessions.md) · [0004 history/retention](adr/0004-history-storage-and-retention.md) · [0005 credentials/throttling](adr/0005-credential-policy-and-login-throttling.md) · [0006 profile limits/deletion](adr/0006-profile-limits-and-deletion.md)
+Release detail: [R2 accounts & profiles](architecture/R2.md) (flows, migrations, API contract)
 
 Legend: **[R1]** build now · **[R2]** accounts/profiles · **[R3]** sessions/history · **[R4]** polish
 
@@ -55,6 +56,8 @@ docs/                ARCHITECTURE.md, adr/
 Internals are blocked via package.json `"exports"`; importing `engine/src/parser` from outside fails the build.
 
 ## 4. Data model [R2+]
+
+R2 DDL, constraints and indexes (plus `login_failure` for throttling): [architecture/R2.md §3](architecture/R2.md#3-migrations-drizzle-appsserverdrizzle-applied-in-order-at-deploy).
 
 ```mermaid
 erDiagram
@@ -208,12 +211,15 @@ DB rows → domain via one `parseCalculationRow()` per table (reject rows that v
 
 ## 6. API surface (all JSON, all under `/api`, all scoped by session cookie)
 
+R2 zod schemas, status codes and error shape: [architecture/R2.md §4](architecture/R2.md#4-api-contract-packagescontracts-zod-4).
+
 | Release | Method & path | Notes |
 |---|---|---|
 | R2 | `POST /auth/signup` `{email,password}` | 409 on duplicate email; creates account + `Default` profile + session |
-| R2 | `POST /auth/login` · `POST /auth/logout` | login rate-limited; logout ends session |
+| R2 | `POST /auth/login` · `POST /auth/logout` | login throttled per email (ADR 0005); logout ends session |
 | R2 | `GET /me` | account, profiles, active profile |
-| R2 | `POST /profiles` · `PATCH /profiles/:id` · `DELETE /profiles/:id` | scoped by AccountScope; 404 if not yours |
+| R2 | `POST /profiles` · `PATCH /profiles/:id` (rename) · `DELETE /profiles/:id` | scoped by AccountScope; 404 if not yours; max 10, not last/active (ADR 0006) |
+| R2 | `PATCH /profile/settings` | active profile only (#4) |
 | R2 | `POST /profiles/:id/activate` | ends session (`profile_switch`), opens new one, rotates cookie |
 | R3 | `POST /calculations` `{expression}` → `Calculation` | expression with Ans already substituted (D12; payload containing `Ans` → 400); server re-evaluates with `engine`, client result never trusted; sent on every `=` that is a calculation attempt, incl. incomplete ones (D3), never for no-ops/input feedback |
 | R3 | `GET /calculations?q=&before=&limit=` | newest first, keyset pagination, active profile only |
