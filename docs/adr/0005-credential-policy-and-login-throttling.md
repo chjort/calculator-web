@@ -14,7 +14,7 @@ ARCHITECTURE §7 says passwords use argon2id and login is rate-limited, but the 
 ## Decision
 Option 2.
 - **Per email:** 5 failed logins per email in a 15-minute rolling window return 429 `rate_limited` with `Retry-After`. Failures are counted from `login_failure` rows, the count resets naturally as the window rolls, and there is no lockout.
-- **Per IP:** a coarse in-memory limit of 30 requests per minute on `/api/auth/*`. It is only a backstop.
+- **Per IP:** a coarse in-memory limit of 30 requests per minute on `/api/auth/*`. It is only a backstop. The limit is configurable via the `AUTH_RATE_LIMIT` env (default 30), which is raised only for parallel e2e runs from one IP.
 - **Timing:** unknown emails still run argon2 verify against a dummy hash, so timing doesn't reveal whether an account exists.
 - **Hashing:** argon2id via `@node-rs/argon2`, m=19 MiB, t=2, p=1 (OWASP). The verifier re-hashes on login if the parameters change.
 - **Passwords:** 12 to 128 characters (PO-confirmed), no composition rules, any Unicode, NFKC-normalised before hashing. The 128 cap bounds hashing cost.
